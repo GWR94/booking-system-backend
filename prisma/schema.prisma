@@ -1,0 +1,44 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            Int       @id @default(autoincrement())
+  name          String
+  email         String     @unique
+  passwordHash  String
+  role          String     @default("user")
+  bookings      Booking[]
+}
+
+model Slot {
+  id        Int       @id @default(autoincrement())
+  startTime DateTime
+  endTime   DateTime
+  status    String    @default("available")
+  bookings  Booking[]
+}
+
+model Booking {
+  id         Int       @id @default(autoincrement())
+  userId     Int
+  slotId     Int
+  bookingTime DateTime @default(now())
+  status     String    @default("confirmed")
+
+  user       User      @relation(fields: [userId], references: [id])
+  slot       Slot      @relation(fields: [slotId], references: [id])
+
+  @@unique([userId, slotId]) // Ensures each user can book each slot only once
+}
