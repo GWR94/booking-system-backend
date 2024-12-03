@@ -4,6 +4,7 @@ import helmet from "helmet";
 import morgan from "morgan";
 import rateLimit from "express-rate-limit";
 import dotenv from "dotenv";
+import cookieParser from "cookie-parser";
 import prisma from "./src/utils/prismaClient"; // Prisma Client import
 import routes from "./src/routes";
 import errorHandler from "./src/middleware/errorHandler";
@@ -13,8 +14,17 @@ dotenv.config();
 const app = express();
 
 // Middleware
+app.use(cookieParser());
 app.use(helmet()); // Sets secure HTTP headers
-app.use(cors({ origin: process.env.CLIENT_ORIGIN || "http://localhost:3000" })); // Configure CORS
+app.use(
+  cors({
+    origin:
+      process.env.NODE_ENV === "production"
+        ? process.env.FRONT_END
+        : "http://localhost:3000",
+    credentials: true,
+  })
+);
 app.use(morgan("dev")); // Request logging
 app.use(express.json()); // JSON body parsing
 

@@ -4,7 +4,7 @@ import dayjs from "dayjs";
 
 // Create a new slot (admin only)
 export const createSlot = async (req: Request, res: Response) => {
-  const { startTime, endTime, status = "available" } = req.body;
+  const { startTime, endTime, status = "available", bay } = req.body;
 
   try {
     const slot = await prisma.slot.create({
@@ -12,6 +12,7 @@ export const createSlot = async (req: Request, res: Response) => {
         startTime: new Date(startTime),
         endTime: new Date(endTime),
         status,
+        bayId: bay as number,
       },
     });
 
@@ -25,7 +26,6 @@ export const createSlot = async (req: Request, res: Response) => {
 // Retrieve all available slots
 export const getSlots = async (req: Request, res: Response) => {
   const { from, to } = req.query;
-  console.log(to, from);
   try {
     if (!from || isNaN(Date.parse(from as string))) {
       return res
@@ -41,7 +41,6 @@ export const getSlots = async (req: Request, res: Response) => {
 
     const slots = await prisma.slot.findMany({
       where: {
-        status: "available",
         startTime: {
           lte: to as string,
           gte: from as string,
@@ -59,15 +58,19 @@ export const getSlots = async (req: Request, res: Response) => {
 // Update an existing slot (admin only)
 export const updateSlot = async (req: Request, res: Response) => {
   const { id } = req.params;
-  const { startTime, endTime, status } = req.body;
-
+  const { startTime, endTime, status, bay } = req.body;
+  if (!startTime || !endTime || !status)
+    return res
+      .status(400)
+      .json({ error: "Invalid startTime, endTime or status" });
   try {
     const slot = await prisma.slot.update({
       where: { id: parseInt(id, 10) },
       data: {
-        startTime: startTime ? new Date(startTime) : undefined,
-        endTime: endTime ? new Date(endTime) : undefined,
-        status: status ?? undefined,
+        startTime: new Date(startTime),
+        endTime: new Date(endTime),
+        status,
+        bayId: bay.id,
       },
     });
 

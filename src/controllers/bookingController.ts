@@ -1,9 +1,18 @@
 import { Request, Response } from "express";
 import prisma from "../utils/prismaClient";
 
+export interface Booking {
+  id: number;
+  userId: number;
+  slotId: number;
+  bookingTime: Date;
+  status: StatusType;
+}
+
+type StatusType = "available" | "booked" | "unavailable";
+
 // Create a booking
 export const createBooking = async (req: Request, res: Response) => {
-  console.log(res);
   const { userId, slotId } = req.body;
 
   try {
@@ -15,8 +24,6 @@ export const createBooking = async (req: Request, res: Response) => {
     if (!slot || slot.status !== "available") {
       return res.status(400).json({ message: "Slot is not available" });
     }
-
-    return res.json({ slot, userId, slotId });
 
     // Create a booking and update slot status to 'booked'
     const booking = await prisma.booking.create({

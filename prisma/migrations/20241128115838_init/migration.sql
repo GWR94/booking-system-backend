@@ -10,11 +10,21 @@ CREATE TABLE "User" (
 );
 
 -- CreateTable
+CREATE TABLE "Bay" (
+    "id" SERIAL NOT NULL,
+    "name" TEXT NOT NULL,
+    "capacity" INTEGER NOT NULL DEFAULT 1,
+
+    CONSTRAINT "Bay_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
 CREATE TABLE "Slot" (
     "id" SERIAL NOT NULL,
     "startTime" TIMESTAMP(3) NOT NULL,
     "endTime" TIMESTAMP(3) NOT NULL,
     "status" TEXT NOT NULL DEFAULT 'available',
+    "bayId" INTEGER NOT NULL,
 
     CONSTRAINT "Slot_pkey" PRIMARY KEY ("id")
 );
@@ -34,7 +44,13 @@ CREATE TABLE "Booking" (
 CREATE UNIQUE INDEX "User_email_key" ON "User"("email");
 
 -- CreateIndex
+CREATE UNIQUE INDEX "Bay_name_key" ON "Bay"("name");
+
+-- CreateIndex
 CREATE UNIQUE INDEX "Booking_userId_slotId_key" ON "Booking"("userId", "slotId");
+
+-- AddForeignKey
+ALTER TABLE "Slot" ADD CONSTRAINT "Slot_bayId_fkey" FOREIGN KEY ("bayId") REFERENCES "Bay"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "Booking" ADD CONSTRAINT "Booking_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
