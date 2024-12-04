@@ -55,6 +55,25 @@ export const getSlots = async (req: Request, res: Response) => {
   }
 };
 
+export const getUniqueSlot = async (req: Request, res: Response) => {
+  const { id } = req.params;
+
+  try {
+    const slot = await prisma.slot.findUnique({
+      where: { id: parseInt(id, 10) },
+    });
+    if (!slot)
+      return res
+        .status(404)
+        .json({ message: "Slot doesn't exist", error: "NOT_FOUND" });
+
+    return res.json({ slot });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: err, message: "Error finding slot" });
+  }
+};
+
 // Update an existing slot (admin only)
 export const updateSlot = async (req: Request, res: Response) => {
   const { id } = req.params;
