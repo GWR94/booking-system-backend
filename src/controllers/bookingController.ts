@@ -1,5 +1,5 @@
 import { Request, Response } from "express";
-import prisma from "../utils/prismaClient";
+import prisma from "../config/prisma-client";
 
 export interface Booking {
   id: number;

@@ -1,6 +1,6 @@
 import { Request, Response, NextFunction } from "express";
 import jwt from "jsonwebtoken";
-import prisma from "../utils/prismaClient";
+import prisma from "../config/prisma-client";
 import { User } from "../controllers/userController";
 
 const authenticateToken = async (
@@ -8,13 +8,6 @@ const authenticateToken = async (
   res: Response,
   next: NextFunction
 ) => {
-  const accessToken = req.cookies.accessToken;
-  console.log({ accessToken });
-
-  if (!accessToken) {
-    return res.status(401).json({ message: "No access token provided" });
-  }
-
   try {
     const accessToken = req.cookies.accessToken;
     if (!accessToken) {

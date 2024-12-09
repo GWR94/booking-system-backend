@@ -1,7 +1,7 @@
 import { Request, Response } from "express";
 import bcrypt from "bcrypt";
 import jwt, { JwtPayload } from "jsonwebtoken";
-import prisma from "../utils/prismaClient";
+import prisma from "../config/prisma-client";
 import generateTokens from "../middleware/generateTokens";
 import { Booking } from "./bookingController";
 
@@ -10,10 +10,13 @@ const SALT_ROUNDS = 10;
 export interface User {
   id: number;
   email: string;
-  passwordHash: string;
+  passwordHash?: string | null;
   role: string;
   name: string;
   bookings?: Booking[];
+  googleId?: string | null;
+  facebookId?: string | null;
+  appleId?: string | null;
 }
 
 interface Error {
@@ -117,9 +120,14 @@ export const loginUser = async (req: Request, res: Response) => {
         .json({ message: "User not found", error: "USER_NOT_FOUND" });
     }
 
+    if (!user.passwordHash)
+      return res.status(422).json({
+        error: "WRONG_AUTH_METHOD",
+        message: `Try signing in with OAuth`,
+      });
+
     // Verify password
     const isPasswordValid = await bcrypt.compare(password, user.passwordHash);
-    console.log(isPasswordValid);
     if (!isPasswordValid) {
       return res.status(401).json({
         message: "Invalid email and password combination",
