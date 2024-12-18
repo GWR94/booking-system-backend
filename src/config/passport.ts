@@ -31,23 +31,27 @@ const findOrCreateUser = async (
   profile: GoogleProfile | FacebookProfile | AppleProfile
 ): Promise<User> => {
   console.log(profile);
-  const email = profile.emails[0].value;
+  const email = (profile.emails?.[0]?.value as string) ?? null;
   const provider = profile.provider;
   try {
-    console.log("Finding user");
+    const whereFilter = email
+      ? {
+          OR: [{ [`${provider}Id`]: profile.id }, { email }],
+        }
+      : {
+          [`${provider}Id`]: profile.id,
+        };
 
     const existingUser = await prisma.user.findFirst({
-      where: {
-        OR: [{ [`${provider}Id`]: profile.id }, { email }],
-      },
+      where: whereFilter,
     });
     console.log(existingUser);
+
     if (existingUser) {
       const user = await prisma.user.update({
         where: { id: existingUser.id },
         data: {
           [`${provider}Id`]: profile.id,
-          email,
         },
       });
       return user;
@@ -55,7 +59,7 @@ const findOrCreateUser = async (
 
     return prisma.user.create({
       data: {
-        email: email as string,
+        email,
         [`${provider}Id`]: profile.id,
         name: profile.displayName,
       },
@@ -84,29 +88,23 @@ passport.use(
   )
 );
 
-// passport.use(
-//   new FacebookStrategy(
-//     {
-//       clientID: process.env.FACEBOOK_CLIENT_ID as string,
-//       clientSecret: process.env.FACEBOOK_CLIENT_SECRET as string,
-//       callbackURL: "/api/user/login/facebook/callback",
-//     },
-//     async (accessToken, refreshToken, profile, done) => {
-//       try {
-//         const user = await findOrCreateUser(profile as FacebookProfile);
-//         const { accessToken: jwtAccessToken, refreshToken: jwtRefreshToken } =
-//           generateTokens(user);
-
-//         done(null, {
-//           user,
-//           jwtAccessToken,
-//           jwtRefreshToken,
-//         });
-//       } catch (err) {
-//         done(err);
-//       }
-//     }
-//   )
-// );
+passport.use(
+  new FacebookStrategy(
+    {
+      clientID: process.env.FACEBOOK_APP_ID as string,
+      clientSecret: process.env.FACEBOOK_APP_SECRET as string,
+      callbackURL: "/api/user/login/facebook/callback",
+      enableProof: true,
+    },
+    async (accessToken, refreshToken, profile, done) => {
+      try {
+        const user = await findOrCreateUser(profile as FacebookProfile);
+        done(null, user);
+      } catch (err) {
+        done(err);
+      }
+    }
+  )
+);
 
 export default passport;

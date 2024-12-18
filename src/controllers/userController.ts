@@ -9,8 +9,8 @@ const SALT_ROUNDS = 10;
 
 export interface User {
   id: number;
-  email: string;
-  passwordHash?: string | null;
+  email: string | null;
+  passwordHash: string | null;
   role: string;
   name: string;
   bookings?: Booking[];
@@ -80,8 +80,15 @@ export const verifyUser = async (req: Request, res: Response) => {
       process.env.ACCESS_TOKEN_SECRET as string
     ) as User;
 
-    const { email, name, id, role, bookings } = (await prisma.user.findUnique({
-      where: { email: decoded.email },
+    const { passwordHash, ...safeUser } = (await prisma.user.findFirst({
+      where: {
+        OR: [
+          { email: decoded?.email },
+          { googleId: decoded?.googleId },
+          { facebookId: decoded?.facebookId },
+          { appleId: decoded?.appleId },
+        ],
+      },
       include: {
         bookings: {
           include: {
@@ -91,16 +98,12 @@ export const verifyUser = async (req: Request, res: Response) => {
       },
     })) as User;
     res.json({
-      user: {
-        email,
-        name,
-        id,
-        role,
-        bookings,
-      },
+      user: safeUser,
     });
   } catch (error) {
-    res.status(404).json({ message: "User not found", error });
+    res
+      .status(404)
+      .json({ message: "User not found", error: "USER_NOT_FOUND" });
   }
 };
 
@@ -137,8 +140,6 @@ export const loginUser = async (req: Request, res: Response) => {
 
     const { accessToken, refreshToken } = generateTokens(user);
 
-    console.log({ accessToken, refreshToken });
-
     res.cookie("accessToken", accessToken, {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production", // Only HTTPS in production
@@ -162,7 +163,7 @@ export const loginUser = async (req: Request, res: Response) => {
       maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
     });
 
-    res.json({ message: "Login successful" });
+    return res.json({ message: "Login successful" });
   } catch (error) {
     console.error("Error logging in:", error);
     res.status(500).json({
@@ -172,9 +173,36 @@ export const loginUser = async (req: Request, res: Response) => {
   }
 };
 
+export const setOAuthTokensThenRedirect = (req: Request, res: Response) => {
+  const { accessToken, refreshToken } = generateTokens(req.user as User);
+  res.cookie("accessToken", accessToken, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production", // Only HTTPS in production
+    sameSite: process.env.NODE_ENV === "production" ? "strict" : "lax",
+    domain:
+      process.env.NODE_ENV === "production"
+        ? process.env.FRONT_END
+        : "localhost",
+    maxAge: 15 * 60 * 1000, // 15 minutes
+  });
+
+  res.cookie("refreshToken", refreshToken, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production", // Only HTTPS in production
+    sameSite: process.env.NODE_ENV === "production" ? "strict" : "lax",
+    domain:
+      process.env.NODE_ENV === "production"
+        ? process.env.FRONT_END
+        : "localhost",
+    path: "/api/user/refresh",
+    maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+  });
+  return res.redirect(process.env.FRONT_END as string);
+};
+
 export const refreshToken = async (req: Request, res: Response) => {
   const refreshToken = req.cookies.refreshToken;
-
+  console.log(refreshToken);
   if (!refreshToken) {
     return res.status(401).json({
       message: "No refresh token provided",
@@ -187,9 +215,10 @@ export const refreshToken = async (req: Request, res: Response) => {
     const decoded = jwt.verify(
       refreshToken,
       process.env.REFRESH_TOKEN_SECRET as string
-    ) as User;
+    ) as any;
+
     const user = await prisma.user.findUnique({
-      where: { email: decoded.email },
+      where: { id: decoded.userId },
     });
 
     const { accessToken, refreshToken: newRefreshToken } = generateTokens(
@@ -220,7 +249,7 @@ export const refreshToken = async (req: Request, res: Response) => {
     console.log("tokens refreshed...");
     res.json({ message: "Tokens refreshed" });
   } catch (err) {
-    res.status(403).json({ message: "Invalid refresh token" });
+    res.status(403).send({ message: "Invalid refresh token", err });
   }
 };
 
@@ -242,7 +271,14 @@ export const getUserProfile = async (req: Request, res: Response) => {
   try {
     const user = await prisma.user.findUnique({
       where: { id: userId },
-      select: { id: true, name: true, email: true, role: true, bookings: true },
+      select: {
+        name: true,
+        email: true,
+        bookings: true,
+        googleId: true,
+        facebookId: true,
+        appleId: true,
+      },
     });
 
     if (!user) {

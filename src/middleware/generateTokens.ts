@@ -4,7 +4,13 @@ const jwt = require("jsonwebtoken");
 
 const generateTokens = (user: User) => {
   const accessToken = jwt.sign(
-    { userId: user.id, email: user.email },
+    {
+      userId: user.id,
+      email: user.email,
+      facebookId: user.facebookId,
+      googleId: user.googleId,
+      appleId: user.appleId,
+    },
     process.env.ACCESS_TOKEN_SECRET,
     { expiresIn: "15m" } // Short lifetime
   );

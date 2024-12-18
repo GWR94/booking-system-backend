@@ -7,6 +7,7 @@ import {
   refreshToken,
   verifyUser,
   User,
+  setOAuthTokensThenRedirect,
 } from "../controllers/userController";
 import authenticateToken from "../middleware/authenticateToken";
 import passport from "../config/passport";
@@ -27,38 +28,30 @@ router.post("/logout", logoutUser);
 
 router.get(
   "/login/google",
-  passport.authenticate("google", { scope: ["profile", "email"] })
+  passport.authenticate("google", { scope: ["profile", "email"] }),
+  (req: Request, res: Response) => {
+    console.log(req, res);
+  }
 );
 
 router.get(
   "/login/google/callback",
   passport.authenticate("google", { session: false }),
-  (req: Request, res: Response) => {
-    const { accessToken, refreshToken } = generateTokens(req.user as User);
-    res.cookie("accessToken", accessToken, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production", // Only HTTPS in production
-      sameSite: process.env.NODE_ENV === "production" ? "strict" : "lax",
-      domain:
-        process.env.NODE_ENV === "production"
-          ? process.env.FRONT_END
-          : "localhost",
-      maxAge: 15 * 60 * 1000, // 15 minutes
-    });
+  setOAuthTokensThenRedirect
+);
 
-    res.cookie("refreshToken", refreshToken, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production", // Only HTTPS in production
-      sameSite: process.env.NODE_ENV === "production" ? "strict" : "lax",
-      domain:
-        process.env.NODE_ENV === "production"
-          ? process.env.FRONT_END
-          : "localhost",
-      path: "/api/user/refresh",
-      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
-    });
-    res.redirect(process.env.FRONT_END as string);
+router.get(
+  "/login/facebook",
+  passport.authenticate("facebook"),
+  (req: Request, res: Response) => {
+    console.log(req, res);
   }
+);
+
+router.get(
+  "/login/facebook/callback",
+  passport.authenticate("facebook", { session: false }),
+  setOAuthTokensThenRedirect
 );
 
 router.get("/verify", verifyUser);
