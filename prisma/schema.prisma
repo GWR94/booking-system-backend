@@ -8,22 +8,22 @@ datasource db {
 }
 
 model User {
-  id            Int       @id @default(autoincrement())
-  name          String
-  email         String?    @unique
-  passwordHash  String?
-  role          String    @default("user")
-  bookings      Booking[]
-  googleId      String?   @unique
-  facebookId    String?   @unique
-  appleId       String?   @unique
+  id           Int       @id @default(autoincrement())
+  name         String
+  email        String?   @unique
+  passwordHash String?
+  role         String    @default("user")
+  bookings     Booking[]
+  googleId     String?   @unique
+  facebookId   String?   @unique
+  appleId      String?   @unique
 }
 
 model Bay {
-  id        Int       @id @default(autoincrement())
-  name      String    @unique
-  capacity  Int       @default(1)
-  slots     Slot[]
+  id       Int    @id @default(autoincrement())
+  name     String @unique
+  capacity Int    @default(1)
+  slots    Slot[]
 }
 
 model Slot {
@@ -31,20 +31,18 @@ model Slot {
   startTime DateTime
   endTime   DateTime
   status    String    @default("available")
-  bayId     Int
-  bay       Bay       @relation(fields: [bayId], references: [id])
-  bookings  Booking[]
+  bookings  Booking[] @relation("BookingSlots")
+  Bay       Bay?      @relation(fields: [bayId], references: [id])
+  bayId     Int?
+
+  @@unique([startTime, endTime, bayId]) // Ensure no overlapping slots
 }
 
 model Booking {
-  id           Int      @id @default(autoincrement())
-  userId       Int
-  slotId       Int
-  bookingTime  DateTime @default(now())
-  status       String   @default("confirmed")
-
-  user         User     @relation(fields: [userId], references: [id])
-  slot         Slot     @relation(fields: [slotId], references: [id])
-
-  @@unique([userId, slotId]) // Maintains uniqueness constraint
+  id          Int      @id @default(autoincrement())
+  userId      Int
+  slots       Slot[]   @relation("BookingSlots")
+  bookingTime DateTime @default(now())
+  status      String   @default("confirmed")
+  user        User     @relation(fields: [userId], references: [id])
 }

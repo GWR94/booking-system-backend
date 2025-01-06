@@ -5,8 +5,12 @@
   "main": "server.ts",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "populate-slots": "ts-node scripts/populateSlots.ts",
-    "dev": "nodemon server.ts"
+    "dev": "nodemon server.ts",
+    "seed": "ts-node scripts/seed.ts",
+    "populate": "ts-node scripts/populateSlots.ts"
+  },
+  "prisma": {
+    "seed": "ts-node scripts/seed.ts"
   },
   "keywords": [],
   "author": "James Gower",
@@ -34,7 +38,7 @@
     "passport-google-oauth20": "^2.0.0",
     "pg": "^8.13.1",
     "prisma": "^5.22.0",
-    "stripe": "^17.4.0"
+    "stripe": "^17.4.0-beta.2"
   },
   "devDependencies": {
     "@types/bcrypt": "^5.0.2",

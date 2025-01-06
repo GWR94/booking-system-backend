@@ -89,13 +89,6 @@ export const verifyUser = async (req: Request, res: Response) => {
           { appleId: decoded?.appleId },
         ],
       },
-      include: {
-        bookings: {
-          include: {
-            slot: true,
-          },
-        },
-      },
     })) as User;
     res.json({
       user: safeUser,
