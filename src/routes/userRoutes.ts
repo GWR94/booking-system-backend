@@ -8,6 +8,7 @@ import {
   verifyUser,
   User,
   setOAuthTokensThenRedirect,
+  deleteUserProfile,
 } from "../controllers/userController";
 import authenticateToken from "../middleware/authenticateToken";
 import passport from "../config/passport";
@@ -53,6 +54,8 @@ router.get(
   passport.authenticate("facebook", { session: false }),
   setOAuthTokensThenRedirect
 );
+
+router.delete("/profile/delete", deleteUserProfile);
 
 router.get("/verify", verifyUser);
 

@@ -284,3 +284,15 @@ export const getUserProfile = async (req: Request, res: Response) => {
     res.status(500).json({ message: "Error fetching user profile", error });
   }
 };
+
+export const deleteUserProfile = async (req: Request, res: Response) => {
+  const userId = (req as any).user.id;
+  try {
+    await prisma.user.delete({
+      where: { id: userId },
+    });
+    res.json({ message: "User successfully deleted" });
+  } catch (err) {
+    res.status(500).json({ message: "Error deleting user", err });
+  }
+};

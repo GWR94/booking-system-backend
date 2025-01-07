@@ -15,7 +15,7 @@ const timeSlots = [
 ];
 
 // Define the total number of slots and the number of days
-const totalSlots = 100;
+const totalSlots = 1000;
 const slotsPerDay = timeSlots.length;
 const daysRequired = Math.ceil(totalSlots / slotsPerDay);
 const noOfBays = 4;
