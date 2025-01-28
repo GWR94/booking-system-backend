@@ -9,17 +9,18 @@ export interface Booking {
   slotId: number;
   bookingTime: Date;
   status: StatusType;
+  paymentId?: string;
+  paymentStatus?: string;
 }
 
 interface BasketItem {
   startTime: Dayjs;
   endTime: Dayjs;
+  slotIds: number[];
 }
 
 type StatusType = "available" | "booked" | "unavailable";
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY as string, {
-  apiVersion: "2024-11-20.acacia; custom_checkout_beta=v1" as any,
-});
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY as string);
 const PRICE_PER_HOUR = 4500; // £45
 
 export const createBooking = async (req: Request, res: Response) => {
@@ -32,27 +33,30 @@ export const createBooking = async (req: Request, res: Response) => {
         id: {
           in: slotIds,
         },
-        status: "available",
       },
     });
 
     if (slots.length !== slotIds.length) {
       return res.status(400).json({
         message: "One or more slots are not available or don't exist",
+        data: { slots, slotIds }, //FIXME
       });
     }
 
     // Create booking with connected slots
     const booking = await prisma.booking.create({
       data: {
-        userId,
+        user: {
+          connect: { id: userId },
+        },
         slots: {
           connect: slotIds.map((id: number) => ({ id })),
         },
-        status: "confirmed",
+        status: "pending",
       },
       include: {
         slots: true,
+        user: true,
       },
     });
 
@@ -68,6 +72,8 @@ export const createBooking = async (req: Request, res: Response) => {
       },
     });
 
+    console.log(booking);
+
     res.status(201).json({
       message: "Booking created successfully",
       booking,
@@ -78,56 +84,57 @@ export const createBooking = async (req: Request, res: Response) => {
   }
 };
 
-export const createCheckoutSession = async (req: Request, res: Response) => {
-  const { basket } = req.body;
-  const session = await stripe.checkout.sessions.create({
-    payment_method_types: ["card"],
-    line_items: [
-      basket.map((item: BasketItem) => ({
-        price_data: {
-          currency: "gbp",
-          product_data: {
-            name: `${dayjs(item.startTime).format("dd mm yyyy hh:mm")} -
-              ${dayjs(item.endTime).format("hh:mm")}
-            }`,
-          },
-          unit_amount: PRICE_PER_HOUR,
-        },
-        quantity: 1,
-      })),
-    ],
-    mode: "payment",
-    return_url: `${process.env.FRONT_END}/bookings`,
-  });
+export const confirmBooking = async (req: Request, res: Response) => {
+  const { bookingId, paymentStatus, paymentId } = req.body;
 
-  res.json({ clientSecret: session.client_secret });
+  try {
+    // Update booking status to confirmed
+    const booking = await prisma.booking.update({
+      where: { id: parseInt(bookingId, 10) },
+      data: {
+        status: "confirmed",
+        paymentId,
+        paymentStatus,
+      },
+    });
+
+    res.json({ message: "Booking confirmed successfully", booking });
+  } catch (error) {
+    console.error("Error confirming booking:", error);
+    res.status(500).json({ message: "Error confirming booking" });
+  }
 };
 
-// export const createPaymentIntent = async (req: Request, res: Response) => {
-//   const { paymentMethodId, sessionLength } = req.body;
+const calculateBasketCost = (items: BasketItem[]) => {
+  return items.reduce(
+    (total: number, item: BasketItem) =>
+      (total += item.slotIds.length * PRICE_PER_HOUR),
+    0
+  );
+};
 
-//   if (!sessionLength || sessionLength > 3 || sessionLength <= 0) {
-//     return res.status(400).send({ error: "Invalid session selected" });
-//   }
+export const createPaymentIntent = async (req: Request, res: Response) => {
+  const { items } = req.body;
 
-//   try {
-//     const intent = await stripe.paymentIntents.create({
-//       amount: PRICE_PER_HOUR * sessionLength,
-//       currency: "gbp",
-//       payment_method: paymentMethodId,
-//       confirmation_method: "manual",
-//       confirm: true,
-//     });
+  if (!items || items.length === 0) {
+    return res.status(400).send({ error: "Invalid item selection" });
+  }
 
-//     res.json({ clientSecret: intent.client_secret });
-//   } catch (error) {
-//     console.error("Error creating payment intent:", error);
-//     res.status(500).json({
-//       error,
-//       message: "Unable to create payment intent",
-//     });
-//   }
-// };
+  try {
+    const intent = await stripe.paymentIntents.create({
+      amount: calculateBasketCost(items),
+      currency: "gbp",
+    });
+
+    res.json({ clientSecret: intent.client_secret });
+  } catch (error) {
+    console.error("Error creating payment intent:", error);
+    res.status(500).json({
+      error,
+      message: "Unable to create payment intent",
+    });
+  }
+};
 
 export const cancelBooking = async (req: Request, res: Response) => {
   const { bookingId } = req.params;

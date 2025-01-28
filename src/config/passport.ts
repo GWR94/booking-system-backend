@@ -8,7 +8,6 @@ import {
   Strategy as GoogleStrategy,
   Profile as GoogleProfile,
 } from "passport-google-oauth20";
-import AppleStrategy, { Profile as AppleProfile } from "passport-apple";
 import prisma from "./prisma-client";
 import { User } from "../controllers/userController";
 
@@ -28,7 +27,7 @@ passport.deserializeUser(async (id: string, done) => {
 });
 
 const findOrCreateUser = async (
-  profile: GoogleProfile | FacebookProfile | AppleProfile
+  profile: GoogleProfile | FacebookProfile
 ): Promise<User> => {
   console.log(profile);
   const email = (profile.emails?.[0]?.value as string) ?? null;
@@ -45,7 +44,6 @@ const findOrCreateUser = async (
     const existingUser = await prisma.user.findFirst({
       where: whereFilter,
     });
-    console.log(existingUser);
 
     if (existingUser) {
       const user = await prisma.user.update({

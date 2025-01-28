@@ -80,7 +80,7 @@ export const verifyUser = async (req: Request, res: Response) => {
       process.env.ACCESS_TOKEN_SECRET as string
     ) as User;
 
-    const { passwordHash, ...safeUser } = (await prisma.user.findFirst({
+    const user = await prisma.user.findFirst({
       where: {
         OR: [
           { email: decoded?.email },
@@ -89,7 +89,22 @@ export const verifyUser = async (req: Request, res: Response) => {
           { appleId: decoded?.appleId },
         ],
       },
-    })) as User;
+      include: {
+        bookings: {
+          include: {
+            slots: true,
+          },
+        },
+      },
+    });
+
+    if (!user) {
+      return res
+        .status(404)
+        .json({ message: "User not found", error: "USER_NOT_FOUND" });
+    }
+
+    const { passwordHash, ...safeUser } = user;
     res.json({
       user: safeUser,
     });

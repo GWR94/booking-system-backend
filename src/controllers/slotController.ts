@@ -45,6 +45,7 @@ export const getSlots = async (req: Request, res: Response) => {
           lte: to as string,
           gte: from as string,
         },
+        status: "available",
       }, // Only fetch available slots
       orderBy: { startTime: "asc" },
     });

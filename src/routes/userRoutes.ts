@@ -29,10 +29,7 @@ router.post("/logout", logoutUser);
 
 router.get(
   "/login/google",
-  passport.authenticate("google", { scope: ["profile", "email"] }),
-  (req: Request, res: Response) => {
-    console.log(req, res);
-  }
+  passport.authenticate("google", { scope: ["profile", "email"] })
 );
 
 router.get(
@@ -41,13 +38,7 @@ router.get(
   setOAuthTokensThenRedirect
 );
 
-router.get(
-  "/login/facebook",
-  passport.authenticate("facebook"),
-  (req: Request, res: Response) => {
-    console.log(req, res);
-  }
-);
+router.get("/login/facebook", passport.authenticate("facebook"));
 
 router.get(
   "/login/facebook/callback",

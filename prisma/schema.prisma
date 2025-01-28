@@ -34,15 +34,16 @@ model Slot {
   bookings  Booking[] @relation("BookingSlots")
   Bay       Bay?      @relation(fields: [bayId], references: [id])
   bayId     Int?
-
   @@unique([startTime, endTime, bayId]) // Ensure no overlapping slots
 }
 
 model Booking {
-  id          Int      @id @default(autoincrement())
-  userId      Int
-  slots       Slot[]   @relation("BookingSlots")
-  bookingTime DateTime @default(now())
-  status      String   @default("confirmed")
-  user        User     @relation(fields: [userId], references: [id])
+  id              Int      @id @default(autoincrement())
+  userId          Int
+  slots           Slot[]   @relation("BookingSlots")
+  bookingTime     DateTime @default(now())
+  status          String   @default("confirmed")
+  user            User     @relation(fields: [userId], references: [id])
+  paymentId       String?
+  paymentStatus   String?
 }
