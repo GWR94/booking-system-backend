@@ -1,9 +1,12 @@
-import { Request, Response } from "express";
+import { NextFunction, Request, Response } from "express";
 import prisma from "../config/prisma-client";
-import dayjs from "dayjs";
 
 // Create a new slot (admin only)
-export const createSlot = async (req: Request, res: Response) => {
+export const createSlot = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
   const { startTime, endTime, status = "available", bay } = req.body;
 
   try {
@@ -18,25 +21,38 @@ export const createSlot = async (req: Request, res: Response) => {
 
     res.status(201).json({ message: "Slot created successfully", slot });
   } catch (error) {
-    console.error("Error creating slot:", error);
-    res.status(500).json({ message: "Error creating slot" });
+    next(error);
   }
 };
 
 // Retrieve all available slots
-export const getSlots = async (req: Request, res: Response) => {
-  const { from, to } = req.query;
+export const getSlots = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
+  const { from, to, ids } = req.query;
   try {
+    if (ids) {
+      const idsArray = (ids as string).split(",").map((id) => parseInt(id, 10));
+      const slots = await prisma.slot.findMany({
+        where: {
+          id: { in: idsArray },
+        },
+        orderBy: { startTime: "asc" },
+      });
+      res.json(slots);
+      return;
+    }
+
     if (!from || isNaN(Date.parse(from as string))) {
-      return res
-        .status(400)
-        .json({ error: 'A valid "from" date is required', from });
+      res.status(400).json({ error: 'A valid "from" date is required', from });
+      return;
     }
 
     if (!to || isNaN(Date.parse(to as string))) {
-      return res
-        .status(400)
-        .json({ error: 'A valid "to" date is required', to });
+      res.status(400).json({ error: 'A valid "to" date is required', to });
+      return;
     }
 
     const slots = await prisma.slot.findMany({
@@ -51,8 +67,7 @@ export const getSlots = async (req: Request, res: Response) => {
     });
     res.json(slots);
   } catch (error) {
-    console.error("Error retrieving slots:", error);
-    res.status(500).json({ message: "Error retrieving slots", error });
+    next(error);
   }
 };
 
@@ -63,12 +78,13 @@ export const getUniqueSlot = async (req: Request, res: Response) => {
     const slot = await prisma.slot.findUnique({
       where: { id: parseInt(id, 10) },
     });
-    if (!slot)
-      return res
+    if (!slot) {
+      res
         .status(404)
         .json({ message: "Slot doesn't exist", error: "NOT_FOUND" });
-
-    return res.json({ slot });
+      return;
+    }
+    res.json({ slot });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: err, message: "Error finding slot" });
@@ -76,13 +92,17 @@ export const getUniqueSlot = async (req: Request, res: Response) => {
 };
 
 // Update an existing slot (admin only)
-export const updateSlot = async (req: Request, res: Response) => {
+export const updateSlot = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
   const { id } = req.params;
   const { startTime, endTime, status, bay } = req.body;
-  if (!startTime || !endTime || !status)
-    return res
-      .status(400)
-      .json({ error: "Invalid startTime, endTime or status" });
+  if (!startTime || !endTime || !status) {
+    res.status(400).json({ error: "Invalid startTime, endTime or status" });
+    return;
+  }
   try {
     const slot = await prisma.slot.update({
       where: { id: parseInt(id, 10) },
@@ -96,13 +116,16 @@ export const updateSlot = async (req: Request, res: Response) => {
 
     res.json({ message: "Slot updated successfully", slot });
   } catch (error) {
-    console.error("Error updating slot:", error);
-    res.status(500).json({ message: "Error updating slot" });
+    next(error);
   }
 };
 
 // Delete a slot (admin only)
-export const deleteSlot = async (req: Request, res: Response) => {
+export const deleteSlot = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
   const { id } = req.params;
 
   try {
@@ -111,7 +134,6 @@ export const deleteSlot = async (req: Request, res: Response) => {
     });
     res.json({ message: "Slot deleted successfully" });
   } catch (error) {
-    console.error("Error deleting slot:", error);
-    res.status(500).json({ message: "Error deleting slot" });
+    next(error);
   }
 };

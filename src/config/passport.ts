@@ -1,4 +1,3 @@
-import { refreshToken } from "./../controllers/userController";
 import passport from "passport";
 import {
   Strategy as FacebookStrategy,
@@ -9,10 +8,11 @@ import {
   Profile as GoogleProfile,
 } from "passport-google-oauth20";
 import prisma from "./prisma-client";
-import { User } from "../controllers/userController";
+import { User } from "../interfaces/user.i";
 
-passport.serializeUser((user: any, done) => {
-  done(null, user.id);
+// FIXME : test removal
+passport.serializeUser((user, done) => {
+  done(null, (user as User).id);
 });
 
 passport.deserializeUser(async (id: string, done) => {

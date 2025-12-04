@@ -1,4 +1,4 @@
-import { NextFunction, Response, Request, Router } from "express";
+import { Router } from "express";
 import {
   registerUser,
   loginUser,
@@ -6,17 +6,15 @@ import {
   getUserProfile,
   refreshToken,
   verifyUser,
-  User,
   setOAuthTokensThenRedirect,
   deleteUserProfile,
-} from "../controllers/userController";
-import authenticateToken from "../middleware/authenticateToken";
+  checkEmailExists,
+} from "../controllers/user.controller";
+import authenticateToken from "../middleware/authenticate-token";
 import passport from "../config/passport";
 import { validateRegistration, validateLogin } from "../middleware/validation";
-import generateTokens from "../middleware/generateTokens";
 
-// /api/user/...
-const router = Router() as any;
+const router = Router();
 
 // Route to register a new user
 router.post("/register", validateRegistration, registerUser);
@@ -46,7 +44,7 @@ router.get(
   setOAuthTokensThenRedirect
 );
 
-router.delete("/profile/delete", deleteUserProfile);
+router.delete("/profile/delete", authenticateToken, deleteUserProfile);
 
 router.get("/verify", verifyUser);
 
@@ -54,5 +52,7 @@ router.post("/refresh", refreshToken);
 
 // Protected route to get user profile
 router.get("/profile", authenticateToken, getUserProfile);
+
+router.get("/check-email", checkEmailExists);
 
 export default router;

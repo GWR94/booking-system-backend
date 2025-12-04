@@ -67,7 +67,8 @@ export const validateRegistration = (
   console.log(req.body);
   const { error } = registrationSchema.validate(req.body);
   if (error) {
-    return res.status(400).json({ message: error.details[0].message });
+    res.status(400).json({ message: error.details[0].message });
+    return;
   }
   next();
 };
@@ -80,7 +81,8 @@ export const validateLogin = (
 ) => {
   const { error } = loginSchema.validate(req.body);
   if (error) {
-    return res.status(400).json({ message: error.details[0].message });
+    res.status(400).json({ message: error.details[0].message });
+    return;
   }
   next();
 };

@@ -5,11 +5,11 @@ import {
   updateSlot,
   getUniqueSlot,
   deleteSlot,
-} from "../controllers/slotController";
-import authenticateToken from "../middleware/authenticateToken";
-import authorizeAdmin from "../middleware/authorizeAdmin";
+} from "../controllers/slot.controller";
+import authenticateToken from "../middleware/authenticate-token";
+import authorizeAdmin from "../middleware/authorize-admin";
 
-const router = Router() as any;
+const router = Router();
 
 // Route to create a slot (protected by admin role)
 router.post("/", authenticateToken, authorizeAdmin, createSlot);

@@ -1,4 +1,4 @@
-import express, { Request, Response, NextFunction } from "express";
+import express, { Request, Response } from "express";
 import cors from "cors";
 import helmet from "helmet";
 import morgan from "morgan";
@@ -8,15 +8,20 @@ import session from "express-session";
 import passport from "./src/config/passport";
 import cookieParser from "cookie-parser";
 import routes from "./src/routes";
-import errorHandler from "./src/middleware/errorHandler";
+import errorHandler from "./src/middleware/error-handler";
 import("./src/config/passport");
 
 dotenv.config();
+
+export interface RequestWithBody extends Request {
+  rawBody?: Buffer;
+}
 
 const app = express();
 
 // Middleware
 app.use(cookieParser());
+// FIXME - test removal
 app.use(
   session({
     secret: process.env.SESSION_SECRET || "",
@@ -41,8 +46,13 @@ app.use(
   })
 );
 app.use(morgan("dev")); // Request logging
-app.use(express.json()); // JSON body parsing
-
+app.use(
+  express.json({
+    verify: (req: RequestWithBody, res, buf) => {
+      req.rawBody = buf;
+    },
+  })
+);
 // Rate Limiting
 const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
