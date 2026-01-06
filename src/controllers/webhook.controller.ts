@@ -112,7 +112,12 @@ export const handleWebhook = async (
         const payment = event.data.object as Stripe.PaymentIntent;
         const { bookingId } = payment.metadata;
         console.log(`Payment failed for booking ${bookingId}`);
-        handleFailedPayment(parseInt(bookingId));
+
+        if (bookingId) {
+          await handleFailedPayment(parseInt(bookingId));
+        } else {
+          console.error("No bookingId found in payment metadata");
+        }
         break;
       }
       default:
@@ -381,7 +386,7 @@ export const confirmBooking = async (
   }
 };
 
-// FIXME TEST
+// Handle failed payments - release slots and update booking status
 const handleFailedPayment = async (bookingId: number) => {
   try {
     // Update booking status to failed
@@ -390,7 +395,9 @@ const handleFailedPayment = async (bookingId: number) => {
       data: {
         status: "failed",
       },
-      include: { slots: true },
+      include: {
+        slots: true,
+      },
     });
 
     // Get all slot IDs associated with this booking
@@ -407,7 +414,10 @@ const handleFailedPayment = async (bookingId: number) => {
         status: "available",
       },
     });
+
+    // Note: No email sent for failed payments since user sees immediate error on frontend
+    console.log(`Payment failed for booking ${bookingId}. Slots released.`);
   } catch (error) {
-    console.error("Error updating booking status:", error);
+    console.error("Error handling failed payment:", error);
   }
 };

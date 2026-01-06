@@ -10,6 +10,7 @@ export interface User {
   googleId?: string | null;
   facebookId?: string | null;
   appleId?: string | null;
+  twitterId?: string | null;
 }
 
 export interface UserPayload {
@@ -19,5 +20,6 @@ export interface UserPayload {
   facebookId?: string | null;
   googleId?: string | null;
   appleId?: string | null;
+  twitterId?: string | null;
   role?: string;
 }

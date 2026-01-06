@@ -7,7 +7,7 @@ const generateTokens = (user: UserPayload) => {
     email: user.email,
     ...(user.facebookId && { facebookId: user.facebookId }),
     ...(user.googleId && { googleId: user.googleId }),
-    ...(user.appleId && { appleId: user.appleId }),
+    ...(user.twitterId && { twitterId: user.twitterId }),
   };
 
   const accessToken = sign(payload, process.env.ACCESS_TOKEN_SECRET as string, {

@@ -9,6 +9,7 @@ import {
   setOAuthTokensThenRedirect,
   deleteUserProfile,
   checkEmailExists,
+  updateUser,
 } from "../controllers/user.controller";
 import authenticateToken from "../middleware/authenticate-token";
 import passport from "../config/passport";
@@ -44,6 +45,14 @@ router.get(
   setOAuthTokensThenRedirect
 );
 
+router.get("/login/twitter", passport.authenticate("twitter"));
+
+router.get(
+  "/login/twitter/callback",
+  passport.authenticate("twitter", { session: false }),
+  setOAuthTokensThenRedirect
+);
+
 router.delete("/profile/delete", authenticateToken, deleteUserProfile);
 
 router.get("/verify", verifyUser);
@@ -52,6 +61,9 @@ router.post("/refresh", refreshToken);
 
 // Protected route to get user profile
 router.get("/profile", authenticateToken, getUserProfile);
+
+// Protected route to update user profile
+router.patch("/profile", authenticateToken, updateUser);
 
 router.get("/check-email", checkEmailExists);
 

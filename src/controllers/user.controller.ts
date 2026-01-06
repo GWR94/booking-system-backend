@@ -11,19 +11,15 @@ const SALT_ROUNDS = 10;
 
 const accessTokenConfig: CookieOptions = {
   httpOnly: true,
-  secure: process.env.NODE_ENV === "production", // Only HTTPS in production
-  sameSite: process.env.NODE_ENV === "production" ? "strict" : "lax",
-  domain:
-    process.env.NODE_ENV === "production" ? process.env.FRONT_END : "localhost",
+  secure: process.env.NODE_ENV === "production",
+  sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
   maxAge: 15 * 60 * 1000, // 15 minutes
 };
 
 const refreshTokenConfig: CookieOptions = {
   httpOnly: true,
-  secure: process.env.NODE_ENV === "production", // Only HTTPS in production
-  sameSite: process.env.NODE_ENV === "production" ? "strict" : "lax",
-  domain:
-    process.env.NODE_ENV === "production" ? process.env.FRONT_END : "localhost",
+  secure: process.env.NODE_ENV === "production",
+  sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
   path: "/api/user/refresh",
 };
 
@@ -107,7 +103,7 @@ export const verifyUser = async (
           { email: decoded?.email },
           { googleId: decoded?.googleId },
           { facebookId: decoded?.facebookId },
-          { appleId: decoded?.appleId },
+          { twitterId: decoded?.twitterId },
         ],
       },
       include: {
@@ -309,7 +305,7 @@ export const getUserProfile = async (
         bookings: true,
         googleId: true,
         facebookId: true,
-        appleId: true,
+        twitterId: true,
       },
     });
 

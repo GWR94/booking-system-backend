@@ -7,6 +7,10 @@ import {
   Strategy as GoogleStrategy,
   Profile as GoogleProfile,
 } from "passport-google-oauth20";
+import {
+  Strategy as TwitterStrategy,
+  Profile as TwitterProfile,
+} from "passport-twitter";
 import prisma from "./prisma-client";
 import { User } from "../interfaces/user.i";
 
@@ -27,7 +31,7 @@ passport.deserializeUser(async (id: string, done) => {
 });
 
 const findOrCreateUser = async (
-  profile: GoogleProfile | FacebookProfile
+  profile: GoogleProfile | FacebookProfile | TwitterProfile
 ): Promise<User> => {
   console.log(profile);
   const email = (profile.emails?.[0]?.value as string) ?? null;
@@ -97,6 +101,30 @@ passport.use(
     async (accessToken, refreshToken, profile, done) => {
       try {
         const user = await findOrCreateUser(profile as FacebookProfile);
+        done(null, user);
+      } catch (err) {
+        done(err);
+      }
+    }
+  )
+);
+
+passport.use(
+  new TwitterStrategy(
+    {
+      consumerKey: process.env.TWITTER_CONSUMER_KEY as string,
+      consumerSecret: process.env.TWITTER_CONSUMER_SECRET as string,
+      callbackURL: "/api/user/login/twitter/callback",
+      includeEmail: true,
+    },
+    async (
+      token: string,
+      tokenSecret: string,
+      profile: TwitterProfile,
+      done: (error: any, user?: any) => void
+    ) => {
+      try {
+        const user = await findOrCreateUser(profile);
         done(null, user);
       } catch (err) {
         done(err);

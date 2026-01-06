@@ -2,7 +2,28 @@ import cron from "node-cron";
 import prisma from "../config/prisma-client";
 
 // Schedule the job to run every minute
+const JOB_TIMEOUT = 50000; // 50 seconds safety timeout
+let isJobRunning = false;
+
+// Schedule the job to run every minute
 cron.schedule("* * * * *", async () => {
+  if (isJobRunning) {
+    console.log(
+      "Skipping booking cleanup job - previous run still in progress"
+    );
+    return;
+  }
+
+  isJobRunning = true;
+
+  // Safety timeout to release lock if stuck
+  const timeoutId = setTimeout(() => {
+    if (isJobRunning) {
+      console.warn("Booking cleanup job timed out, forcing lock release");
+      isJobRunning = false;
+    }
+  }, JOB_TIMEOUT);
+
   try {
     // Calculate the threshold date (15 minutes ago)
     const thresholdDate = new Date(Date.now() - 15 * 60 * 1000);
@@ -16,6 +37,10 @@ cron.schedule("* * * * *", async () => {
       include: { slots: true },
     });
 
+    if (staleBookings.length > 0) {
+      console.log(`Found ${staleBookings.length} stale bookings to clean up`);
+    }
+
     for (const booking of staleBookings) {
       console.log(`Cancelling stale booking ${booking.id}`);
 
@@ -27,13 +52,18 @@ cron.schedule("* * * * *", async () => {
 
       // Revert the associated slots back to "available"
       const slotIds = booking.slots.map((slot) => slot.id);
-      console.log(`Reverting slots ${slotIds} back to available`);
-      await prisma.slot.updateMany({
-        where: { id: { in: slotIds } },
-        data: { status: "available" },
-      });
+      if (slotIds.length > 0) {
+        console.log(`Reverting slots ${slotIds.join(", ")} back to available`);
+        await prisma.slot.updateMany({
+          where: { id: { in: slotIds } },
+          data: { status: "available" },
+        });
+      }
     }
   } catch (error) {
     console.error("Error cleaning up stale bookings:", error);
+  } finally {
+    clearTimeout(timeoutId);
+    isJobRunning = false;
   }
 });

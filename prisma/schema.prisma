@@ -17,7 +17,7 @@ model User {
   bookings         Booking[]
   googleId         String?   @unique
   facebookId       String?   @unique
-  appleId          String?   @unique
+  twitterId        String?   @unique
   allowMarketing   Boolean?
   resetToken       String?
   resetTokenExpiry DateTime?

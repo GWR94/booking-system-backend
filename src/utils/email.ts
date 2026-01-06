@@ -1,7 +1,7 @@
 import nodemailer from "nodemailer";
 import hbs from "nodemailer-express-handlebars";
 
-type EmailTemplateName = "confirmation" | "password-reset";
+type EmailTemplateName = "confirmation" | "password-reset" | "contact-form";
 
 interface ConfirmationEmailContext extends HeaderContext, FooterContext {
   booking: {
@@ -16,6 +16,14 @@ interface ConfirmationEmailContext extends HeaderContext, FooterContext {
     intentId: string;
     amount: string;
   };
+}
+
+interface ContactFormEmailContext extends HeaderContext, FooterContext {
+  name: string;
+  email: string;
+  phone?: string;
+  subject: string;
+  message: string;
 }
 
 interface HeaderContext {
@@ -35,6 +43,7 @@ interface PasswordResetEmailContext extends HeaderContext, FooterContext {
 interface TemplateContextMap {
   confirmation: ConfirmationEmailContext;
   "password-reset": PasswordResetEmailContext;
+  "contact-form": ContactFormEmailContext;
 }
 
 export interface SendConfirmProps<T extends EmailTemplateName> {
