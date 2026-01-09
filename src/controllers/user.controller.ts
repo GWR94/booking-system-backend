@@ -10,10 +10,14 @@ import Stripe from "stripe";
 
 const SALT_ROUNDS = 10;
 
+const isProduction =
+  process.env.NODE_ENV === "production" ||
+  process.env.FRONT_END?.startsWith("https");
+
 const accessTokenConfig: CookieOptions = {
   httpOnly: true,
-  secure: process.env.NODE_ENV === "production",
-  sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
+  secure: isProduction,
+  sameSite: isProduction ? "none" : "lax",
   maxAge: 15 * 60 * 1000, // 15 minutes
 };
 
@@ -21,8 +25,8 @@ const stripe = new Stripe(process.env.STRIPE_SECRET_KEY as string);
 
 const refreshTokenConfig: CookieOptions = {
   httpOnly: true,
-  secure: process.env.NODE_ENV === "production",
-  sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
+  secure: isProduction,
+  sameSite: isProduction ? "none" : "lax",
   path: "/api/user/refresh",
 };
 

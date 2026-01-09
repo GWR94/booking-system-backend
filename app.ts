@@ -24,16 +24,20 @@ app.set("trust proxy", 1);
 // Middleware
 app.use(cookieParser());
 // FIXME - test removal
+const isProduction =
+  process.env.NODE_ENV === "production" ||
+  process.env.FRONT_END?.startsWith("https");
+
 app.use(
   session({
     secret: process.env.SESSION_SECRET || "",
     resave: false,
     saveUninitialized: true,
     cookie: {
-      secure: process.env.NODE_ENV === "production", // Set to true if using https
+      secure: isProduction, // Set to true if using https
       httpOnly: true,
       maxAge: 24 * 60 * 60 * 1000, // 24 hours
-      sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
+      sameSite: isProduction ? "none" : "lax",
     },
   })
 );
