@@ -5,7 +5,8 @@ import prisma from "../config/prisma-client";
 import generateTokens from "../utils/generate-tokens";
 import { User, UserPayload } from "../interfaces/user.i";
 import { AuthenticatedRequest } from "../interfaces/common.i";
-import ERRORS from "../utils/errors";
+import { MEMBERSHIP_TIERS, MembershipTier } from "../config/membership.config";
+import Stripe from "stripe";
 
 const SALT_ROUNDS = 10;
 
@@ -15,6 +16,8 @@ const accessTokenConfig: CookieOptions = {
   sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
   maxAge: 15 * 60 * 1000, // 15 minutes
 };
+
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY as string);
 
 const refreshTokenConfig: CookieOptions = {
   httpOnly: true,
@@ -38,7 +41,10 @@ export const registerUser = async (
     });
 
     if (userExists && userExists.passwordHash) {
-      res.status(409).json(ERRORS.DUPLICATE_USER);
+      res.status(409).json({
+        message: "User already exists",
+        error: "DUPLICATE_USER",
+      });
       return;
     }
 
@@ -88,7 +94,10 @@ export const verifyUser = async (
   try {
     const { accessToken } = req.cookies;
     if (!accessToken) {
-      res.status(401).json(ERRORS.NO_ACCESS_TOKEN);
+      res.status(401).json({
+        message: "No access token found",
+        error: "NO_ACCESS_TOKEN",
+      });
       return;
     }
 
@@ -116,7 +125,10 @@ export const verifyUser = async (
     });
 
     if (!user) {
-      res.status(404).json(ERRORS.USER_NOT_FOUND);
+      res.status(404).json({
+        message: "User not found",
+        error: "USER_NOT_FOUND",
+      });
       return;
     }
 
@@ -145,12 +157,18 @@ export const loginUser = async (
     });
 
     if (!user) {
-      res.status(404).json(ERRORS.USER_NOT_FOUND);
+      res.status(404).json({
+        message: "User not found",
+        error: "USER_NOT_FOUND",
+      });
       return;
     }
 
     if (!user.passwordHash) {
-      res.status(422).json(ERRORS.WRONG_AUTH_METHOD);
+      res.status(422).json({
+        message: "User authentication method not supported",
+        error: "WRONG_AUTH_METHOD",
+      });
       return;
     }
 
@@ -158,7 +176,10 @@ export const loginUser = async (
     const validPassword = await bcrypt.compare(password, user.passwordHash);
 
     if (!validPassword) {
-      res.status(401).json(ERRORS.INCORRECT_INPUT);
+      res.status(401).json({
+        message: "Incorrect email or password",
+        error: "INCORRECT_INPUT",
+      });
       return;
     }
 
@@ -212,7 +233,10 @@ export const setOAuthTokensThenRedirect = (
   const user = req.user as UserPayload;
   try {
     if (!user) {
-      res.status(400).json(ERRORS.NOT_AUTHENTICATED);
+      res.status(400).json({
+        message: "User not authenticated",
+        error: "NOT_AUTHENTICATED",
+      });
       return;
     }
     const { accessToken, refreshToken } = generateTokens(user);
@@ -221,6 +245,7 @@ export const setOAuthTokensThenRedirect = (
     res.redirect(process.env.FRONT_END as string);
     return;
   } catch (error) {
+    console.error("Error in setOAuthTokensThenRedirect:", error);
     next(error);
   }
 };
@@ -251,7 +276,10 @@ export const refreshToken = async (
 ) => {
   const { refreshToken } = req.cookies;
   if (!refreshToken) {
-    res.status(401).json(ERRORS.NO_REFRESH_TOKEN);
+    res.status(401).json({
+      message: "No refresh token found",
+      error: "NO_REFRESH_TOKEN",
+    });
     return;
   }
 
@@ -291,7 +319,10 @@ export const getUserProfile = async (
   next: NextFunction
 ) => {
   if (!req.currentUser) {
-    res.status(400).json(ERRORS.NOT_AUTHENTICATED);
+    res.status(400).json({
+      message: "User not authenticated",
+      error: "NOT_AUTHENTICATED",
+    });
     return;
   }
   const { id } = req.currentUser;
@@ -310,7 +341,10 @@ export const getUserProfile = async (
     });
 
     if (!user) {
-      res.status(404).json(ERRORS.USER_NOT_FOUND);
+      res.status(404).json({
+        message: "User not found",
+        error: "USER_NOT_FOUND",
+      });
       return;
     }
 
@@ -326,7 +360,10 @@ export const deleteUserProfile = async (
   next: NextFunction
 ) => {
   if (!req.currentUser) {
-    res.status(400).json(ERRORS.NOT_AUTHENTICATED);
+    res.status(400).json({
+      message: "User not authenticated",
+      error: "NOT_AUTHENTICATED",
+    });
     return;
   }
   const { id } = req.currentUser;
@@ -335,6 +372,115 @@ export const deleteUserProfile = async (
       where: { id },
     });
     res.json({ message: "User successfully deleted" });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const createSubscriptionSession = async (
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+) => {
+  const tokenUser = req.currentUser;
+  const { tier } = req.body;
+
+  if (!tokenUser) {
+    res.status(401).json({ message: "Unauthorized" });
+    return;
+  }
+
+  if (!tier || !MEMBERSHIP_TIERS[tier as MembershipTier]) {
+    res.status(400).json({ message: "Invalid membership tier" });
+    return;
+  }
+
+  const selectedTier = MEMBERSHIP_TIERS[tier as MembershipTier];
+
+  try {
+    const user = await prisma.user.findUnique({
+      where: { id: tokenUser.id },
+    });
+
+    if (!user) {
+      res.status(404).json({ message: "User not found" });
+      return;
+    }
+
+    let customerId = user.stripeCustomerId;
+
+    if (!customerId) {
+      const customer = await stripe.customers.create({
+        email: user.email || undefined,
+        name: user.name,
+        metadata: {
+          userId: user.id.toString(),
+        },
+      });
+      customerId = customer.id;
+
+      await prisma.user.update({
+        where: { id: user.id },
+        data: { stripeCustomerId: customerId },
+      });
+    } else if (user.email) {
+      await stripe.customers.update(customerId, {
+        email: user.email,
+        name: user.name,
+      });
+    }
+
+    const session = await stripe.checkout.sessions.create({
+      customer: customerId,
+      mode: "subscription",
+      payment_method_types: ["card"],
+      line_items: [
+        {
+          price: selectedTier.priceId,
+          quantity: 1,
+        },
+      ],
+      success_url: `${process.env.FRONT_END}/profile?session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${process.env.FRONT_END}/membership`,
+      metadata: {
+        userId: user.id.toString(),
+        tier: tier,
+      },
+    });
+
+    res.json({ sessionId: session.id, url: session.url });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const createPortalSession = async (
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+) => {
+  const tokenUser = req.currentUser;
+
+  if (!tokenUser) {
+    res.status(401).json({ message: "Unauthorized" });
+    return;
+  }
+
+  try {
+    const user = await prisma.user.findUnique({
+      where: { id: tokenUser.id },
+    });
+
+    if (!user || !user.stripeCustomerId) {
+      res.status(400).json({ message: "User has no subscription to manage" });
+      return;
+    }
+    const session = await stripe.billingPortal.sessions.create({
+      customer: user.stripeCustomerId,
+      return_url: `${process.env.FRONT_END}/profile`,
+    });
+
+    res.json({ url: session.url });
   } catch (error) {
     next(error);
   }

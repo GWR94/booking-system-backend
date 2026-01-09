@@ -1,12 +1,13 @@
 import { NextFunction, Request, Response } from "express";
 import prisma from "../config/prisma-client";
 import Stripe from "stripe";
-import { BasketItem } from "../interfaces/booking.i";
+import { BasketItem, PRICE_PER_HOUR } from "../interfaces/booking.i";
 import calculateBasketCost from "../utils/calculate-basket-cost";
 import { AuthenticatedRequest } from "../interfaces/common.i";
-import ERRORS from "../utils/errors";
 import axios from "axios";
 import { groupSlotsByBay } from "../utils/group-slots";
+import dayjs from "dayjs";
+import { MEMBERSHIP_TIERS, MembershipTier } from "../config/membership.config";
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY as string, {
   apiVersion: "2025-01-27.acacia",
@@ -100,7 +101,10 @@ export const createBooking = async (
 
   try {
     if (!currentUser) {
-      res.status(401).json(ERRORS.NOT_AUTHENTICATED);
+      res.status(401).json({
+        message: "Unauthorized",
+        error: "NOT_AUTHENTICATED",
+      });
       return;
     }
 
@@ -184,8 +188,67 @@ export const createPaymentIntent = async (
   }
 
   try {
+    let finalAmount = calculateBasketCost(items);
+    const totalHoursRequested = slotIds.length;
+
+    const user = await prisma.user.findUnique({
+      where: { id: currentUser.id },
+      include: {
+        bookings: {
+          include: { slots: true },
+        },
+      },
+    });
+
+    if (user?.membershipTier && user.membershipStatus === "active") {
+      const tierConfig =
+        MEMBERSHIP_TIERS[user.membershipTier as MembershipTier];
+      if (tierConfig) {
+        const periodStart = user.currentPeriodStart || new Date(); // Fallback if missing
+        const periodEnd = user.currentPeriodEnd || new Date();
+
+        // Calculate used hours in current period
+        let usedHours = 0;
+        user.bookings.forEach((booking) => {
+          // Only count confirmed bookings in the current period
+          if (booking.status === "confirmed" || booking.status === "pending") {
+            // Check date overlap - primitive check
+            const bookingDate = new Date(booking.bookingTime);
+            if (bookingDate >= periodStart && bookingDate <= periodEnd) {
+              usedHours += booking.slots.length;
+            }
+          }
+        });
+
+        const includedHours = tierConfig.includedHours;
+        const remainingIncluded = Math.max(0, includedHours - usedHours);
+
+        let freeHours = 0;
+        let paidHours = 0;
+
+        if (remainingIncluded >= totalHoursRequested) {
+          freeHours = totalHoursRequested;
+          paidHours = 0;
+        } else {
+          freeHours = remainingIncluded;
+          paidHours = totalHoursRequested - remainingIncluded;
+        }
+
+        const costForPaid = paidHours * PRICE_PER_HOUR;
+        const discountedCost = costForPaid * (1 - tierConfig.discount);
+
+        finalAmount = Math.round(discountedCost);
+      }
+    }
+
+    if (finalAmount === 0) {
+      // Free booking (covered by membership)
+      res.json({ clientSecret: null, amount: 0 });
+      return;
+    }
+
     const intent = await stripe.paymentIntents.create({
-      amount: calculateBasketCost(items),
+      amount: finalAmount,
       currency: "gbp",
       metadata: {
         userId: currentUser.id.toString(),
@@ -193,7 +256,7 @@ export const createPaymentIntent = async (
       },
     });
 
-    res.json({ clientSecret: intent.client_secret });
+    res.json({ clientSecret: intent.client_secret, amount: finalAmount });
   } catch (error) {
     next(error);
   }

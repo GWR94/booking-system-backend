@@ -19,6 +19,8 @@ export interface RequestWithBody extends Request {
 
 const app = express();
 
+app.set("trust proxy", 1);
+
 // Middleware
 app.use(cookieParser());
 // FIXME - test removal
@@ -38,10 +40,7 @@ app.use(
 app.use(helmet()); // Sets secure HTTP headers
 app.use(
   cors({
-    origin:
-      process.env.NODE_ENV === "production"
-        ? process.env.FRONT_END
-        : "http://localhost:3000",
+    origin: process.env.FRONT_END,
     credentials: true,
     allowedHeaders: ["Content-Type", "Authorization"],
   })
@@ -62,11 +61,11 @@ const apiLimiter = rateLimit({
 
 app.use("/api", apiLimiter);
 
-// Routes
-app.use("/api", routes);
-
 app.use(passport.initialize());
 app.use(passport.session());
+
+// Routes
+app.use("/api", routes);
 
 // Root route
 app.get("/", (req: Request, res: Response) => {

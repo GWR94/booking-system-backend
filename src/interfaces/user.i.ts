@@ -11,6 +11,12 @@ export interface User {
   facebookId?: string | null;
   appleId?: string | null;
   twitterId?: string | null;
+  stripeCustomerId?: string | null;
+  membershipTier?: string | null;
+  membershipStatus?: string | null;
+  currentPeriodStart?: Date | null;
+  currentPeriodEnd?: Date | null;
+  cancelAtPeriodEnd?: boolean | null;
 }
 
 export interface UserPayload {

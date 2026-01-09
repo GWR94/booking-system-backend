@@ -21,6 +21,12 @@ model User {
   allowMarketing   Boolean?
   resetToken       String?
   resetTokenExpiry DateTime?
+  stripeCustomerId   String?   @unique
+  membershipTier     String?   // 'BRONZE', 'SILVER', 'GOLD'
+  membershipStatus   String?   // 'active', 'past_due', 'canceled'
+  currentPeriodStart DateTime?
+  currentPeriodEnd   DateTime?
+  cancelAtPeriodEnd  Boolean?  @default(false)
 }
 
 model Bay {

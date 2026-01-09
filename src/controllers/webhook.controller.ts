@@ -7,6 +7,8 @@ import { groupSlotsByBay } from "../utils/group-slots";
 import crypto from "crypto";
 import dayjs from "dayjs";
 import advanced from "dayjs/plugin/advancedFormat";
+import { User } from "../interfaces/user.i";
+import { MEMBERSHIP_TIERS } from "../config/membership.config";
 
 dayjs.extend(advanced);
 
@@ -118,6 +120,23 @@ export const handleWebhook = async (
         } else {
           console.error("No bookingId found in payment metadata");
         }
+        break;
+      }
+      case "customer.subscription.created":
+      case "customer.subscription.updated": {
+        const subscription = event.data.object as Stripe.Subscription;
+        await handleSubscriptionUpdate(subscription);
+        break;
+      }
+      case "customer.subscription.deleted": {
+        const subscription = event.data.object as Stripe.Subscription;
+        await handleSubscriptionDeletion(subscription);
+        break;
+      }
+      case "invoice.payment_succeeded": {
+        // We can handle this if we need to track individual invoices, but subscription.updated
+        // usually gives us the new period start/end.
+        // However, invoice.payment_succeeded is good for verifying the payment actually went through.
         break;
       }
       default:
@@ -295,6 +314,7 @@ export const requestPasswordReset = async (
 
     // Send the email
     await handleSendEmail({
+      senderPrefix: "noreply",
       recipientEmail: user.email as string,
       subject: "Password Reset Request",
       templateName: "password-reset",
@@ -303,7 +323,7 @@ export const requestPasswordReset = async (
         resetUrl: resetUrl,
         year: new Date().getFullYear(),
         baseUrl: process.env.FRONT_END!,
-        logoUrl: `${process.env.FRONT_END}/GLF-logo.png`,
+        logoUrl: process.env.LOGO_URL!,
       },
     });
 
@@ -359,6 +379,7 @@ export const confirmBooking = async (
     console.log("Sending confirmation email to:", booking.user.email);
 
     await handleSendEmail({
+      senderPrefix: "bookings",
       recipientEmail: booking.user.email!,
       templateName: "confirmation",
       subject: "Booking Confirmation",
@@ -373,7 +394,7 @@ export const confirmBooking = async (
         },
         year: new Date().getFullYear(),
         baseUrl: process.env.FRONT_END!,
-        logoUrl: `${process.env.FRONT_END}/GLF-logo.png`,
+        logoUrl: process.env.LOGO_URL!,
       },
     });
 
@@ -419,5 +440,60 @@ const handleFailedPayment = async (bookingId: number) => {
     console.log(`Payment failed for booking ${bookingId}. Slots released.`);
   } catch (error) {
     console.error("Error handling failed payment:", error);
+  }
+};
+
+const handleSubscriptionUpdate = async (subscription: Stripe.Subscription) => {
+  const customerId = subscription.customer as string;
+  const status = subscription.status;
+  const currentPeriodStart = new Date(subscription.current_period_start * 1000);
+  const currentPeriodEnd = new Date(subscription.current_period_end * 1000);
+  const priceId = subscription.items.data[0].price.id;
+
+  // Identify Tier
+  const tierEntry = Object.entries(MEMBERSHIP_TIERS).find(
+    ([, val]) => val.priceId === priceId
+  );
+  const tier = tierEntry ? tierEntry[0] : null;
+
+  try {
+    await prisma.user.update({
+      where: { stripeCustomerId: customerId },
+      data: {
+        membershipStatus: status,
+        currentPeriodStart,
+        currentPeriodEnd,
+        cancelAtPeriodEnd: subscription.cancel_at_period_end,
+        ...(tier && { membershipTier: tier }),
+      },
+    });
+    console.log(`Updated subscription for customer ${customerId}`);
+  } catch (error) {
+    console.error(
+      `Error updating subscription for customer ${customerId}:`,
+      error
+    );
+  }
+};
+
+const handleSubscriptionDeletion = async (
+  subscription: Stripe.Subscription
+) => {
+  const customerId = subscription.customer as string;
+
+  try {
+    await prisma.user.update({
+      where: { stripeCustomerId: customerId },
+      data: {
+        membershipStatus: "canceled",
+        membershipTier: null,
+      },
+    });
+    console.log(`Canceled subscription for customer ${customerId}`);
+  } catch (error) {
+    console.error(
+      `Error canceling subscription for customer ${customerId}:`,
+      error
+    );
   }
 };

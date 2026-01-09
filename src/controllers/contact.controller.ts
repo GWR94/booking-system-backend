@@ -1,6 +1,5 @@
 import { Request, Response, NextFunction } from "express";
 import { handleSendEmail } from "../utils/email";
-import ERRORS from "../utils/errors";
 
 export const sendContactMessage = async (
   req: Request,
@@ -16,13 +15,10 @@ export const sendContactMessage = async (
   }
 
   try {
-    // Determine the recipient - likely the admin or info email
-    // For now, using the configured EMAIL_FROM or a specific env if you have one
-    const recipientEmail =
-      process.env.CONTACT_EMAIL || process.env.EMAIL_FROM || "info@example.com";
-
     await handleSendEmail({
-      recipientEmail,
+      recipientEmail: "contact@jamesgower.dev",
+      senderPrefix: "contact",
+      replyTo: email,
       subject: `New Contact Form: ${subject}`,
       templateName: "contact-form",
       templateContext: {
@@ -31,7 +27,7 @@ export const sendContactMessage = async (
         phone,
         subject,
         message,
-        baseUrl: process.env.FRONT_END || "http://localhost:3000",
+        baseUrl: process.env.FRONT_END as string,
         logoUrl: process.env.LOGO_URL || "",
         year: new Date().getFullYear(),
       },

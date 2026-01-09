@@ -48,14 +48,16 @@ interface TemplateContextMap {
 
 export interface SendConfirmProps<T extends EmailTemplateName> {
   recipientEmail: string;
+  senderPrefix: string;
   subject: string;
   templateName: T;
   templateContext: TemplateContextMap[T];
+  replyTo?: string;
 }
 
 const transporter = nodemailer.createTransport({
   host: process.env.EMAIL_HOST,
-  port: parseInt(process.env.EMAIL_PORT || "587", 10),
+  port: parseInt(process.env.EMAIL_PORT || "465", 10),
   secure: process.env.EMAIL_SECURE === "true",
   auth: {
     user: process.env.EMAIL_USER,
@@ -81,15 +83,20 @@ transporter.use(
 
 export const handleSendEmail = async <T extends EmailTemplateName>({
   recipientEmail,
+  senderPrefix,
   subject,
   templateName,
   templateContext,
+  replyTo,
 }: SendConfirmProps<T>) => {
   try {
+    const fromAddress = `${senderPrefix}@jamesgower.dev`;
+
     const mailOptions = {
-      from: process.env.EMAIL_FROM,
+      from: fromAddress,
       to: recipientEmail,
-      subject: subject,
+      replyTo,
+      subject,
       template: templateName,
       context: templateContext,
     };

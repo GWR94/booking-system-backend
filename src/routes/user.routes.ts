@@ -10,6 +10,8 @@ import {
   deleteUserProfile,
   checkEmailExists,
   updateUser,
+  createSubscriptionSession,
+  createPortalSession,
 } from "../controllers/user.controller";
 import authenticateToken from "../middleware/authenticate-token";
 import passport from "../config/passport";
@@ -64,6 +66,18 @@ router.get("/profile", authenticateToken, getUserProfile);
 
 // Protected route to update user profile
 router.patch("/profile", authenticateToken, updateUser);
+
+// Subscription routes
+router.post(
+  "/subscription/create-session",
+  authenticateToken,
+  createSubscriptionSession
+);
+router.post(
+  "/subscription/portal-session",
+  authenticateToken,
+  createPortalSession
+);
 
 router.get("/check-email", checkEmailExists);
 
