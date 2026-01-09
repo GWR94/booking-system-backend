@@ -28,10 +28,6 @@ const isProduction =
   process.env.NODE_ENV === "production" ||
   process.env.FRONT_END?.startsWith("https");
 
-const domain = isProduction
-  ? new URL(process.env.FRONT_END!).hostname.replace(/^[^.]+\./g, ".")
-  : undefined;
-
 app.use(
   session({
     secret: process.env.SESSION_SECRET || "",
@@ -42,7 +38,6 @@ app.use(
       httpOnly: true,
       maxAge: 24 * 60 * 60 * 1000, // 24 hours
       sameSite: isProduction ? "none" : "lax",
-      domain,
     },
   })
 );
