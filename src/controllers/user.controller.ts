@@ -14,11 +14,16 @@ const isProduction =
   process.env.NODE_ENV === "production" ||
   process.env.FRONT_END?.startsWith("https");
 
+const domain = isProduction
+  ? new URL(process.env.FRONT_END!).hostname.replace(/^[^.]+\./g, ".")
+  : undefined;
+
 const accessTokenConfig: CookieOptions = {
   httpOnly: true,
   secure: isProduction,
   sameSite: isProduction ? "none" : "lax",
   maxAge: 15 * 60 * 1000, // 15 minutes
+  domain,
 };
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY as string);
@@ -28,6 +33,7 @@ const refreshTokenConfig: CookieOptions = {
   secure: isProduction,
   sameSite: isProduction ? "none" : "lax",
   path: "/api/user/refresh",
+  domain,
 };
 
 // Register a new user
