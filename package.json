@@ -10,7 +10,8 @@
     "seed": "ts-node scripts/seed.ts",
     "populate": "ts-node scripts/populateSlots.ts",
     "test": "jest",
-    "test:watch": "jest --watch"
+    "test:watch": "jest --watch",
+    "postinstall": "prisma generate"
   },
   "prisma": {
     "seed": "ts-node scripts/seed.ts"
