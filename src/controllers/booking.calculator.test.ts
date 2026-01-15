@@ -2,6 +2,7 @@ import { createPaymentIntent } from "./booking.controller";
 import prisma from "../config/prisma-client";
 import calculateBasketCost from "../utils/calculate-basket-cost";
 import Stripe from "stripe";
+import { MembershipStatus } from "@prisma/client";
 
 // Mock dependencies
 jest.mock("../config/prisma-client", () => {
@@ -105,7 +106,7 @@ describe("Booking Cost Logic", () => {
       bookings: [], // 0 used hours
       currentPeriodStart: new Date("2023-01-01"),
       currentPeriodEnd: new Date("2023-02-01"),
-      membershipStatus: "active",
+      membershipStatus: MembershipStatus.ACTIVE,
     });
 
     await createPaymentIntent(req, res, next);
@@ -119,7 +120,7 @@ describe("Booking Cost Logic", () => {
     (prisma.user.findUnique as jest.Mock).mockResolvedValue({
       id: 1,
       membershipTier: "PAR",
-      membershipStatus: "active",
+      membershipStatus: MembershipStatus.ACTIVE,
       currentPeriodStart: new Date("2023-01-01"),
       currentPeriodEnd: new Date("2023-02-01"),
       bookings: [
@@ -151,7 +152,7 @@ describe("Booking Cost Logic", () => {
     (prisma.user.findUnique as jest.Mock).mockResolvedValue({
       id: 1,
       membershipTier: "PAR",
-      membershipStatus: "active",
+      membershipStatus: MembershipStatus.ACTIVE,
       currentPeriodStart: new Date("2023-01-01"),
       currentPeriodEnd: new Date("2023-02-01"),
       bookings: [
@@ -183,7 +184,7 @@ describe("Booking Cost Logic", () => {
     (prisma.user.findUnique as jest.Mock).mockResolvedValue({
       id: 1,
       membershipTier: "BIRDIE",
-      membershipStatus: "active",
+      membershipStatus: MembershipStatus.ACTIVE,
       currentPeriodStart: new Date("2023-01-01"),
       currentPeriodEnd: new Date("2023-02-01"),
       bookings: [
@@ -210,7 +211,7 @@ describe("Booking Cost Logic", () => {
     (prisma.user.findUnique as jest.Mock).mockResolvedValue({
       id: 1,
       membershipTier: "PAR", // Par
-      membershipStatus: "active",
+      membershipStatus: MembershipStatus.ACTIVE,
       currentPeriodStart: new Date("2023-01-01"),
       currentPeriodEnd: new Date("2023-02-01"),
       bookings: [], // 0 used

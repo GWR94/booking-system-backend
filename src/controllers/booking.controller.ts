@@ -200,11 +200,11 @@ export const createPaymentIntent = async (
       },
     });
 
-    if (user?.membershipTier && user.membershipStatus === "active") {
+    if (user?.membershipTier && user.membershipStatus === "ACTIVE") {
       const tierConfig =
         MEMBERSHIP_TIERS[user.membershipTier as MembershipTier];
       if (tierConfig) {
-        const periodStart = user.currentPeriodStart || new Date(); // Fallback if missing
+        const periodStart = user.currentPeriodStart || new Date();
         const periodEnd = user.currentPeriodEnd || new Date();
 
         // Calculate used hours in current period

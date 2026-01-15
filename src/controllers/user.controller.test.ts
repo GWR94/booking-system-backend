@@ -11,6 +11,7 @@ import { Request, Response, NextFunction } from "express";
 import { registerUser, verifyUser } from "./user.controller";
 import prisma from "../config/prisma-client";
 import bcrypt from "bcrypt";
+import { MembershipStatus, MembershipTier } from "@prisma/client";
 
 // Mock dependencies
 jest.mock("../config/prisma-client", () => ({

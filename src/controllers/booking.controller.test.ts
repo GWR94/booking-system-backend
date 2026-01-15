@@ -3,11 +3,10 @@ import {
   it,
   expect,
   jest,
-  beforeAll,
   beforeEach,
   afterAll,
 } from "@jest/globals";
-import { Request, Response, NextFunction } from "express";
+import { Response, NextFunction } from "express";
 import { createBooking } from "./booking.controller";
 import prisma from "../config/prisma-client";
 import { AuthenticatedRequest } from "../interfaces/common.i";
@@ -33,7 +32,12 @@ jest.mock("stripe", () => {
 jest.mock("../config/prisma-client", () => {
   const client = {
     booking: { create: jest.fn() },
-    slot: { findUnique: jest.fn(), update: jest.fn() },
+    slot: {
+      findUnique: jest.fn(),
+      findMany: jest.fn(),
+      update: jest.fn(),
+      updateMany: jest.fn(),
+    },
     $transaction: jest.fn(),
   };
   (client.$transaction as jest.Mock) = jest.fn((cb: any) => cb(client));
@@ -49,15 +53,16 @@ describe("BookingController Integration", () => {
   let res: Partial<Response>;
   let next: NextFunction;
 
-  beforeAll(() => {
-    // One-time setup
-  });
-
   beforeEach(() => {
     jest.clearAllMocks();
 
     req = {
-      user: { id: "test-user-id", email: "test@test.com" },
+      currentUser: {
+        id: 1,
+        email: "test@test.com",
+        membershipTier: "PAR",
+        membershipStatus: "ACTIVE",
+      },
       body: {},
     } as Partial<AuthenticatedRequest>;
 
@@ -77,59 +82,49 @@ describe("BookingController Integration", () => {
     it("should create a booking successfully when slot is available", async () => {
       // Arrange
       req.body = {
-        slotId: "slot-123",
+        slotIds: [123],
         date: "2025-05-20",
       };
 
-      const mockSlot = { id: "slot-123", isBooked: false };
+      const mockSlot = { id: 123, isBooked: false };
       const mockBooking = {
-        id: "booking-abc",
-        slotId: "slot-123",
-        userId: "test-user-id",
+        id: 1,
+        slotId: 123,
+        userId: 1,
       };
 
       // Mock Prisma behavior
-      (prisma.slot.findUnique as any).mockResolvedValue(mockSlot);
+      (prisma.slot.findMany as any).mockResolvedValue([mockSlot]);
       (prisma.booking.create as any).mockResolvedValue(mockBooking);
-      (prisma.slot.update as any).mockResolvedValue({
-        ...mockSlot,
-        isBooked: true,
-      });
+      (prisma.slot.updateMany as any).mockResolvedValue({ count: 1 });
       (prisma.$transaction as any).mockImplementation(async (callback: any) => {
         return callback(prisma);
       });
 
-      // Act
       await createBooking(req as AuthenticatedRequest, res as Response, next);
 
-      // Assert
-      // Note: Because we mocked transaction to execute immediately, we can check atomic calls if logic allows
-      // However, createBooking uses transaction, so checking strict calls inside transaction mock is tricky without complex setup.
-      // We will verify the final response for now.
-
-      // Since transaction support in standard mock is complex, we assume the controller refactors to use the client passed to it, or we rely on the implementation detail.
-      // For this test, verifying it called `json` with success is key.
-
-      // NOTE: Real implementation might differ, assuming standard flow:
-      // expect(res.status).toHaveBeenCalledWith(201); // Or 200 depending on implementation
-      // expect(res.json).toHaveBeenCalled();
+      expect(res.status).toHaveBeenCalledWith(201);
+      expect(res.json).toHaveBeenCalledWith(
+        expect.objectContaining({
+          message: "Booking created successfully",
+          booking: expect.objectContaining({
+            id: 1,
+            slotId: 123,
+            userId: 1,
+          }),
+        })
+      );
     });
 
     it("should fail if slot is missing or already booked", async () => {
       // Arrange
-      req.body = { slotId: "slot-booked" };
+      req.body = { slotIds: [999] };
 
-      (prisma.slot.findUnique as any).mockResolvedValue({
-        id: "slot-booked",
-        isBooked: true,
-      });
+      (prisma.slot.findMany as any).mockResolvedValue([]);
 
-      // Act
       await createBooking(req as AuthenticatedRequest, res as Response, next);
 
-      // Assert
-      // Expect error handling
-      // expect(res.status).toHaveBeenCalledWith(400); // or 409
+      expect(res.status).toHaveBeenCalledWith(400);
     });
   });
 });
