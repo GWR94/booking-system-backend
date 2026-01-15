@@ -9,6 +9,7 @@ import dayjs from "dayjs";
 import advanced from "dayjs/plugin/advancedFormat";
 import { User } from "../interfaces/user.i";
 import { MEMBERSHIP_TIERS } from "../config/membership.config";
+import { MembershipStatus, MembershipTier } from "@prisma/client";
 
 dayjs.extend(advanced);
 
@@ -372,11 +373,7 @@ export const confirmBooking = async (
 
     const intents = await stripe.paymentIntents.retrieve(paymentId);
     const amount = intents.amount / 100;
-
-    // Group consecutive slots by bay
     const groupedSlots = groupSlotsByBay(booking.slots);
-
-    console.log("Sending confirmation email to:", booking.user.email);
 
     await handleSendEmail({
       senderPrefix: "bookings",
@@ -450,17 +447,22 @@ const handleSubscriptionUpdate = async (subscription: Stripe.Subscription) => {
   const currentPeriodEnd = new Date(subscription.current_period_end * 1000);
   const priceId = subscription.items.data[0].price.id;
 
-  // Identify Tier
   const tierEntry = Object.entries(MEMBERSHIP_TIERS).find(
     ([, val]) => val.priceId === priceId
   );
-  const tier = tierEntry ? tierEntry[0] : null;
+  const tier = tierEntry ? (tierEntry[0] as MembershipTier) : null;
+
+  // Map Stripe status to our Enum
+  let mappedStatus: MembershipStatus = MembershipStatus.CANCELLED;
+  if (["active", "trialing"].includes(status)) {
+    mappedStatus = MembershipStatus.ACTIVE;
+  }
 
   try {
     await prisma.user.update({
       where: { stripeCustomerId: customerId },
       data: {
-        membershipStatus: status,
+        membershipStatus: mappedStatus,
         currentPeriodStart,
         currentPeriodEnd,
         cancelAtPeriodEnd: subscription.cancel_at_period_end,
@@ -485,7 +487,7 @@ const handleSubscriptionDeletion = async (
     await prisma.user.update({
       where: { stripeCustomerId: customerId },
       data: {
-        membershipStatus: "canceled",
+        membershipStatus: MembershipStatus.CANCELLED,
         membershipTier: null,
       },
     });

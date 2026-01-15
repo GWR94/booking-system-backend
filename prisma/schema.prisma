@@ -7,6 +7,18 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+
+enum MembershipTier {
+  PAR
+  BIRDIE
+  HOLEINONE
+}
+
+enum MembershipStatus {
+  ACTIVE
+  CANCELLED
+}
+
 model User {
   id               Int       @id @default(autoincrement())
   name             String
@@ -22,8 +34,8 @@ model User {
   resetToken       String?
   resetTokenExpiry DateTime?
   stripeCustomerId   String?   @unique
-  membershipTier     String?   // 'BRONZE', 'SILVER', 'GOLD'
-  membershipStatus   String?   // 'active', 'past_due', 'canceled'
+  membershipTier     MembershipTier?
+  membershipStatus   MembershipStatus?
   currentPeriodStart DateTime?
   currentPeriodEnd   DateTime?
   cancelAtPeriodEnd  Boolean?  @default(false)

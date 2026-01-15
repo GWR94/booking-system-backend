@@ -221,17 +221,29 @@ export const createPaymentIntent = async (
         });
 
         const includedHours = tierConfig.includedHours;
-        const remainingIncluded = Math.max(0, includedHours - usedHours);
+        let remainingIncluded = Math.max(0, includedHours - usedHours);
 
         let freeHours = 0;
         let paidHours = 0;
 
-        if (remainingIncluded >= totalHoursRequested) {
-          freeHours = totalHoursRequested;
-          paidHours = 0;
-        } else {
-          freeHours = remainingIncluded;
-          paidHours = totalHoursRequested - remainingIncluded;
+        // Iterate through all requested slots to determine which are eligible for 'included' hours
+        for (const item of items) {
+          const start = dayjs(item.startTime);
+          const durationHours = item.slotIds.length; // Assuming 1 slot = 1 hour as per line 192
+
+          for (let i = 0; i < durationHours; i++) {
+            const slotTime = start.add(i, "hour");
+            const dayOfWeek = slotTime.day(); // 0 = Sunday, 6 = Saturday
+            const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
+            const isEligibleForFree = tierConfig.weekendAccess || !isWeekend;
+
+            if (isEligibleForFree && remainingIncluded > 0) {
+              freeHours++;
+              remainingIncluded--;
+            } else {
+              paidHours++;
+            }
+          }
         }
 
         const costForPaid = paidHours * PRICE_PER_HOUR;

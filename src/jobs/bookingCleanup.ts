@@ -28,14 +28,31 @@ cron.schedule("* * * * *", async () => {
     // Calculate the threshold date (15 minutes ago)
     const thresholdDate = new Date(Date.now() - 15 * 60 * 1000);
 
-    // Find bookings still pending that were created before the threshold
-    const staleBookings = await prisma.booking.findMany({
-      where: {
-        status: "pending",
-        bookingTime: { lt: thresholdDate },
-      },
-      include: { slots: true },
-    });
+    let staleBookings = [];
+    try {
+      // Find bookings still pending that were created before the threshold
+      staleBookings = await prisma.booking.findMany({
+        where: {
+          status: "pending",
+          bookingTime: { lt: thresholdDate },
+        },
+        include: { slots: true },
+      });
+    } catch (err: any) {
+      if (err?.code === "P5010" || err?.message?.includes("fetch failed")) {
+        console.warn("Prisma fetch failed, retrying once...");
+        await new Promise((r) => setTimeout(r, 1000));
+        staleBookings = await prisma.booking.findMany({
+          where: {
+            status: "pending",
+            bookingTime: { lt: thresholdDate },
+          },
+          include: { slots: true },
+        });
+      } else {
+        throw err;
+      }
+    }
 
     if (staleBookings.length > 0) {
       console.log(`Found ${staleBookings.length} stale bookings to clean up`);

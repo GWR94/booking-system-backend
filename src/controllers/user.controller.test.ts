@@ -8,7 +8,7 @@ import {
   afterAll,
 } from "@jest/globals";
 import { Request, Response, NextFunction } from "express";
-import { registerUser } from "./user.controller";
+import { registerUser, verifyUser } from "./user.controller";
 import prisma from "../config/prisma-client";
 import bcrypt from "bcrypt";
 
@@ -121,6 +121,36 @@ describe("UserController Integration", () => {
         })
       );
       expect(prisma.user.create).not.toHaveBeenCalled();
+    });
+  });
+  describe("#verifyUser", () => {
+    it("should return user: null (200 OK) if no tokens present", async () => {
+      // Arrange
+      req.cookies = {}; // No tokens
+
+      // Act
+      await verifyUser(req as Request, res as Response, next);
+
+      // Assert
+      // Should NOT call res.status(401)
+      expect(res.json).toHaveBeenCalledWith({ user: null });
+      expect(next).not.toHaveBeenCalled();
+    });
+
+    it("should return 401 if refresh token exists but access token missing", async () => {
+      // Arrange
+      // This mimics the "expired session" state where frontend interceptor should refresh
+      req.cookies = { refreshToken: "valid_refresh_token" };
+      // No access token
+
+      // Act
+      await verifyUser(req as Request, res as Response, next);
+
+      // Assert
+      expect(res.status).toHaveBeenCalledWith(401);
+      expect(res.json).toHaveBeenCalledWith(
+        expect.objectContaining({ error: "NO_ACCESS_TOKEN" })
+      );
     });
   });
 });

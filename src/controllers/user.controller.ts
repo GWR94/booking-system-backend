@@ -102,8 +102,18 @@ export const verifyUser = async (
   next: NextFunction
 ) => {
   try {
-    const { accessToken } = req.cookies;
+    const { accessToken, refreshToken } = req.cookies;
+
+    // If no access token AND no refresh token, user is simply not logged in (Guest)
+    // Return null user instead of 401 to prevent frontend refresh loop
+    if (!accessToken && !refreshToken) {
+      res.json({ user: null });
+      return;
+    }
+
     if (!accessToken) {
+      // If we have a refresh token but no access token, let the frontend
+      // interceptor handle the refresh via 401
       res.status(401).json({
         message: "No access token found",
         error: "NO_ACCESS_TOKEN",
@@ -116,14 +126,9 @@ export const verifyUser = async (
       process.env.ACCESS_TOKEN_SECRET as string
     ) as User;
 
-    const user = await prisma.user.findFirst({
+    const user = await prisma.user.findUnique({
       where: {
-        OR: [
-          { email: decoded?.email },
-          { googleId: decoded?.googleId },
-          { facebookId: decoded?.facebookId },
-          { twitterId: decoded?.twitterId },
-        ],
+        id: decoded.id,
       },
       include: {
         bookings: {
@@ -491,6 +496,80 @@ export const createPortalSession = async (
     });
 
     res.json({ url: session.url });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const unlinkProvider = async (
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+) => {
+  const { provider } = req.params;
+  const userPayload = req.currentUser;
+
+  if (!userPayload) {
+    res.status(401).json({ message: "Unauthorized" });
+    return;
+  }
+
+  const allowedProviders = ["google", "facebook", "twitter"];
+  if (!allowedProviders.includes(provider)) {
+    res.status(400).json({ message: "Invalid provider" });
+    return;
+  }
+
+  try {
+    const user = await prisma.user.findUnique({
+      where: { id: userPayload.id },
+    });
+
+    if (!user) {
+      res.status(404).json({ message: "User not found" });
+      return;
+    }
+
+    // Safety Check: Prevent lockout
+    const activeProviders = [
+      user.googleId,
+      user.facebookId,
+      user.twitterId,
+    ].filter(Boolean).length;
+
+    const hasPassword = !!user.passwordHash;
+
+    if (!hasPassword && activeProviders <= 1) {
+      res.status(400).json({
+        message:
+          "Cannot disconnect your only login method. Please set a password or connect another account first.",
+        error: "LOCKOUT_PREVENTION",
+      });
+      return;
+    }
+
+    // Unlink
+    const updatedUser = await prisma.user.update({
+      where: { id: user.id },
+      data: {
+        [`${provider}Id`]: null,
+      },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        bookings: true,
+        googleId: true,
+        facebookId: true,
+        twitterId: true,
+        // Exclude passwordHash
+      },
+    });
+
+    res.json({
+      message: `${provider} disconnected successfully`,
+      user: updatedUser,
+    });
   } catch (error) {
     next(error);
   }

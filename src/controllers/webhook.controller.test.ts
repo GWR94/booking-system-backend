@@ -18,6 +18,7 @@ jest.mock("stripe", () => {
       },
       paymentIntents: {
         update: jest.fn(),
+        retrieve: jest.fn(() => Promise.resolve({ amount: 2000 })), // Mock return for retrieve
       },
     })),
   };

@@ -11,8 +11,9 @@ import {
   Strategy as TwitterStrategy,
   Profile as TwitterProfile,
 } from "passport-twitter";
+import { User, UserPayload } from "../interfaces/user.i";
+import { AuthenticatedRequest } from "../interfaces/common.i";
 import prisma from "./prisma-client";
-import { User } from "../interfaces/user.i";
 
 // FIXME : test removal
 passport.serializeUser((user, done) => {
@@ -31,11 +32,42 @@ passport.deserializeUser(async (id: string, done) => {
 });
 
 const findOrCreateUser = async (
+  req: AuthenticatedRequest,
   profile: GoogleProfile | FacebookProfile | TwitterProfile
 ): Promise<User> => {
-  console.log(profile);
   const email = (profile.emails?.[0]?.value as string) ?? null;
   const provider = profile.provider;
+
+  // If user is already authenticated (Account Linking)
+  if (req.currentUser) {
+    const currentUserId = (req.currentUser as UserPayload).id;
+
+    // Check if this social account is already linked to ANOTHER user
+    const existingLink = await prisma.user.findFirst({
+      where: { [`${provider}Id`]: profile.id },
+    });
+
+    if (existingLink) {
+      if (existingLink.id === currentUserId) {
+        return existingLink;
+      } else {
+        throw new Error(
+          "This social account is already linked to another user."
+        );
+      }
+    }
+
+    // Link the account
+    const updatedUser = await prisma.user.update({
+      where: { id: currentUserId },
+      data: {
+        [`${provider}Id`]: profile.id,
+      },
+    });
+    return updatedUser;
+  }
+
+  // Normal Login / Register Flow
   try {
     const whereFilter = email
       ? {
@@ -67,7 +99,7 @@ const findOrCreateUser = async (
       },
     });
   } catch (err) {
-    console.error(err);
+    console.error("Error in findOrCreateUser:", err);
     throw new Error(`Unable to find or create user: ${err}`);
   }
 };
@@ -78,10 +110,11 @@ passport.use(
       clientID: process.env.GOOGLE_CLIENT_ID as string,
       clientSecret: process.env.GOOGLE_CLIENT_SECRET as string,
       callbackURL: `/api/user/login/google/callback`,
+      passReqToCallback: true,
     },
-    async (accessToken, refreshToken, profile, done) => {
+    async (req, accessToken, refreshToken, profile, done) => {
       try {
-        const user = await findOrCreateUser(profile as GoogleProfile);
+        const user = await findOrCreateUser(req, profile as GoogleProfile);
         done(null, user);
       } catch (err) {
         done(err);
@@ -97,10 +130,11 @@ passport.use(
       clientSecret: process.env.FACEBOOK_APP_SECRET as string,
       callbackURL: "/api/user/login/facebook/callback",
       enableProof: true,
+      passReqToCallback: true,
     },
-    async (accessToken, refreshToken, profile, done) => {
+    async (req, accessToken, refreshToken, profile, done) => {
       try {
-        const user = await findOrCreateUser(profile as FacebookProfile);
+        const user = await findOrCreateUser(req, profile as FacebookProfile);
         done(null, user);
       } catch (err) {
         done(err);
@@ -115,16 +149,19 @@ passport.use(
       consumerKey: process.env.TWITTER_CONSUMER_KEY as string,
       consumerSecret: process.env.TWITTER_CONSUMER_SECRET as string,
       callbackURL: "/api/user/login/twitter/callback",
+      userAuthorizationURL: "https://api.twitter.com/oauth/authorize",
       includeEmail: true,
+      passReqToCallback: true,
     },
     async (
+      req,
       token: string,
       tokenSecret: string,
       profile: TwitterProfile,
       done: (error: any, user?: any) => void
     ) => {
       try {
-        const user = await findOrCreateUser(profile);
+        const user = await findOrCreateUser(req, profile);
         done(null, user);
       } catch (err) {
         done(err);

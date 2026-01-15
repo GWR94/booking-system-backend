@@ -5,12 +5,12 @@
   "main": "server.ts",
   "scripts": {
     "start": "node dist/server.js",
-    "build": "tsc",
+    "build": "npm test && tsc",
     "dev": "nodemon server.ts",
     "seed": "ts-node scripts/seed.ts",
     "populate": "ts-node scripts/populateSlots.ts",
-    "test": "jest",
-    "test:watch": "jest --watch",
+    "test": "jest --silent",
+    "test:watch": "jest --watch --silent",
     "postinstall": "prisma generate"
   },
   "prisma": {
