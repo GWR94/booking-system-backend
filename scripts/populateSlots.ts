@@ -19,7 +19,7 @@ const timeSlots = [
 ];
 
 const daysToCreate = 365;
-const noOfBays = 3;
+const noOfBays = 4;
 
 async function createSlots() {
   // First, ensure bays exist

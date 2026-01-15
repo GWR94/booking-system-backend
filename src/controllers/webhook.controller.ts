@@ -134,12 +134,6 @@ export const handleWebhook = async (
         await handleSubscriptionDeletion(subscription);
         break;
       }
-      case "invoice.payment_succeeded": {
-        // We can handle this if we need to track individual invoices, but subscription.updated
-        // usually gives us the new period start/end.
-        // However, invoice.payment_succeeded is good for verifying the payment actually went through.
-        break;
-      }
       default:
         // Unexpected event type
         console.log(`Unhandled event type ${event.type}.`);
