@@ -1,6 +1,6 @@
 import express from "express";
 import { Router } from "express";
-import { handleWebhook } from "../controllers/webhook.controller";
+import { handleWebhook } from "@controllers";
 
 const router = Router();
 

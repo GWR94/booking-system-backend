@@ -1,5 +1,6 @@
 import nodemailer from "nodemailer";
 import hbs from "nodemailer-express-handlebars";
+import { logger } from "./logger";
 
 type EmailTemplateName = "confirmation" | "password-reset" | "contact-form";
 
@@ -78,7 +79,7 @@ transporter.use(
     },
     viewPath: path.resolve(__dirname, "../templates/emails"),
     extName: ".hbs",
-  })
+  }),
 );
 
 export const handleSendEmail = async <T extends EmailTemplateName>({
@@ -102,8 +103,8 @@ export const handleSendEmail = async <T extends EmailTemplateName>({
     };
 
     await transporter.sendMail(mailOptions);
-    console.log("Confirmation email sent successfully to:", recipientEmail);
+    logger.info(`Confirmation email sent successfully to: ${recipientEmail}`);
   } catch (error) {
-    console.error("Error sending confirmation email:", error);
+    logger.error(`Error sending confirmation email: ${error}`);
   }
 };

@@ -1,4 +1,5 @@
 import { NextFunction, Request, Response } from "express";
+import { logger } from "@utils";
 
 interface CustomError extends Error {
   status?: number;
@@ -9,9 +10,9 @@ const errorHandler = async (
   req: Request,
   res: Response,
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  next: NextFunction
+  next: NextFunction,
 ) => {
-  console.error(err.stack);
+  logger.error(err.stack);
   res.status(err?.status ?? 500).json({
     message: err?.message ?? "Internal Server Error",
     error: process.env.NODE_ENV === "development" ? err.message : undefined,

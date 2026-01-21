@@ -5,11 +5,11 @@ import morgan from "morgan";
 import rateLimit from "express-rate-limit";
 import dotenv from "dotenv";
 import session from "express-session";
-import passport from "./src/config/passport";
+import passport from "./src/config/passport.config";
 import cookieParser from "cookie-parser";
 import routes from "./src/routes";
 import errorHandler from "./src/middleware/error-handler";
-import("./src/config/passport");
+import("./src/config/passport.config");
 
 dotenv.config();
 
@@ -44,7 +44,7 @@ app.use(
       sameSite: isProduction ? "none" : "lax",
       domain,
     },
-  })
+  }),
 );
 app.use(helmet()); // Sets secure HTTP headers
 app.use(
@@ -52,7 +52,7 @@ app.use(
     origin: process.env.FRONT_END,
     credentials: true,
     allowedHeaders: ["Content-Type", "Authorization"],
-  })
+  }),
 );
 app.use(morgan("dev")); // Request logging
 app.use(
@@ -60,12 +60,22 @@ app.use(
     verify: (req: RequestWithBody, res, buf) => {
       req.rawBody = buf;
     },
-  })
+  }),
 );
 // Rate Limiting
 const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
   max: 100, // Max requests per IP
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req: Request, res: Response): string => {
+    const cloudflareIP = req.header("CF-Connecting-IP");
+    return (
+      (Array.isArray(cloudflareIP) ? cloudflareIP[0] : cloudflareIP) ||
+      req.ip ||
+      "127.0.0.1"
+    );
+  },
 });
 
 app.use("/api", apiLimiter);
@@ -76,9 +86,24 @@ app.use(passport.session());
 // Routes
 app.use("/api", routes);
 
+import { prisma } from "@config";
+
 // Root route
 app.get("/", (req: Request, res: Response) => {
   res.send("Welcome to the Booking System API");
+});
+
+// Health Check
+app.get("/health", async (req: Request, res: Response) => {
+  try {
+    await prisma.$queryRaw`SELECT 1`;
+    res.status(200).json({ status: "ok", timestamp: new Date() });
+  } catch (error) {
+    console.error("Health check failed:", error);
+    res
+      .status(500)
+      .json({ status: "error", message: "Database connection failed" });
+  }
 });
 
 // Error Handling Middleware

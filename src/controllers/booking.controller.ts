@@ -1,100 +1,18 @@
 import { NextFunction, Request, Response } from "express";
-import prisma from "../config/prisma-client";
+import { prisma, MEMBERSHIP_TIERS, MembershipTier } from "@config";
 import Stripe from "stripe";
-import { BasketItem, PRICE_PER_HOUR } from "../interfaces/booking.i";
-import calculateBasketCost from "../utils/calculate-basket-cost";
-import { AuthenticatedRequest } from "../interfaces/common.i";
+import { BasketItem, PRICE_PER_HOUR, AuthenticatedRequest } from "@interfaces";
+import { calculateBasketCost, groupSlotsByBay } from "@utils";
+import { BookingService } from "@services";
 import axios from "axios";
-import { groupSlotsByBay } from "../utils/group-slots";
 import dayjs from "dayjs";
-import { MEMBERSHIP_TIERS, MembershipTier } from "../config/membership.config";
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY as string, {
-  apiVersion: "2025-01-27.acacia",
-});
-
-export const createAdminBooking = async (
-  req: Request,
-  res: Response,
-  next: NextFunction
-) => {
-  const { slotIds } = req.body;
-
-  try {
-    // Verify all slots exist and are available
-    const slots = await prisma.slot.findMany({
-      where: {
-        id: {
-          in: slotIds,
-        },
-        status: "available",
-      },
-    });
-
-    if (slots.length !== slotIds.length) {
-      const unavailableSlotIds = slotIds.filter(
-        (id: number) => !slots.some((slot) => slot.id === id)
-      );
-      res.status(400).json({
-        message: `The following slots are not available or don't exist: ${unavailableSlotIds.join(
-          ", "
-        )}`,
-        error: "SLOT_NOT_AVAILABLE",
-      });
-      return;
-    }
-
-    // Create booking with connected slots
-    const booking = await prisma.booking.create({
-      data: {
-        user: {
-          // admin will be 1
-          connect: { id: 1 },
-        },
-        slots: {
-          connect: slotIds.map((id: number) => ({ id })),
-        },
-        status: "confirmed - local",
-      },
-      include: {
-        slots: true,
-        user: true,
-      },
-    });
-
-    // Update all slots to booked status individually
-    for (const slotId of slotIds) {
-      try {
-        await prisma.slot.update({
-          where: { id: slotId },
-          data: { status: "booked" },
-        });
-      } catch (error) {
-        console.error(
-          `Failed to update slot ${slotId} to booked status:`,
-          error
-        );
-        res.status(500).json({
-          message: `Failed to update slot ${slotId} to booked status`,
-          error: "PARTIAL_UPDATE_FAILURE",
-        });
-        return;
-      }
-    }
-
-    res.status(201).json({
-      message: "Admin booking created successfully",
-      booking,
-    });
-  } catch (error) {
-    next(error);
-  }
-};
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY as string);
 
 export const createBooking = async (
   req: AuthenticatedRequest,
   res: Response,
-  next: NextFunction
+  next: NextFunction,
 ) => {
   const { slotIds, paymentId, paymentStatus } = req.body;
   const { currentUser } = req;
@@ -108,54 +26,11 @@ export const createBooking = async (
       return;
     }
 
-    // Verify all slots exist and are available
-    const slots = await prisma.slot.findMany({
-      where: {
-        id: {
-          in: slotIds,
-        },
-        status: "awaiting payment",
-      },
-    });
-
-    console.log(slots, slotIds);
-
-    if (slots.length !== slotIds.length) {
-      res.status(400).json({
-        message: "One or more slots are not available or don't exist",
-        error: "SLOT_NOT_AVAILABLE",
-      });
-      return;
-    }
-
-    // Create booking with connected slots
-    const booking = await prisma.booking.create({
-      data: {
-        user: {
-          connect: { id: currentUser.id },
-        },
-        slots: {
-          connect: slotIds.map((id: number) => ({ id })),
-        },
-        status: "pending",
-        paymentId,
-        paymentStatus,
-      },
-      include: {
-        slots: true,
-      },
-    });
-
-    // Update all slots to booked status
-    await prisma.slot.updateMany({
-      where: {
-        id: {
-          in: slotIds,
-        },
-      },
-      data: {
-        status: "booked",
-      },
+    const booking = await BookingService.createBooking({
+      userId: currentUser.id,
+      slotIds,
+      paymentId,
+      paymentStatus,
     });
 
     res.status(201).json({
@@ -163,6 +38,16 @@ export const createBooking = async (
       booking,
     });
   } catch (error) {
+    if (
+      (error as Error).message ===
+      "One or more slots do not exist or have been booked"
+    ) {
+      res.status(400).json({
+        message: (error as Error).message,
+        error: "SLOT_NOT_AVAILABLE",
+      });
+      return;
+    }
     next(error);
   }
 };
@@ -170,7 +55,7 @@ export const createBooking = async (
 export const createPaymentIntent = async (
   req: AuthenticatedRequest,
   res: Response,
-  next: NextFunction
+  next: NextFunction,
 ) => {
   const { items } = req.body;
   const { currentUser } = req;
@@ -277,12 +162,11 @@ export const createPaymentIntent = async (
 export const cancelBooking = async (
   req: Request,
   res: Response,
-  next: NextFunction
+  next: NextFunction,
 ) => {
   const { bookingId } = req.params;
 
   try {
-    // Get booking details with associated slots
     const booking = await prisma.booking.findUnique({
       where: { id: parseInt(bookingId, 10) },
       include: { slots: true },
@@ -299,7 +183,6 @@ export const cancelBooking = async (
     // [ ] Add date / time check for company policy - eg no closer than 2 weeks
     // [ ] Add stripe refund ??
 
-    // Get all slot IDs associated with this booking
     const slotIds = booking.slots.map((slot) => slot.id);
 
     if (slotIds.length === 0) {
@@ -310,7 +193,6 @@ export const cancelBooking = async (
       return;
     }
 
-    // Update all associated slots back to 'available'
     await prisma.slot.updateMany({
       where: {
         id: {
@@ -322,7 +204,6 @@ export const cancelBooking = async (
       },
     });
 
-    // Delete the booking
     await prisma.booking.delete({
       where: { id: booking.id },
     });
@@ -336,7 +217,7 @@ export const cancelBooking = async (
 export const createGuestPaymentIntent = async (
   req: Request,
   res: Response,
-  next: NextFunction
+  next: NextFunction,
 ) => {
   const { items, guestInfo, recaptchaToken } = req.body;
   const slotIds = items.map((item: BasketItem) => item.slotIds).flat();
@@ -353,9 +234,8 @@ export const createGuestPaymentIntent = async (
   }
 
   try {
-    // Verify reCAPTCHA
     const recaptchaResponse = await axios.post(
-      `https://www.google.com/recaptcha/api/siteverify?secret=${process.env.CAPTCHA_SECRET_KEY}&response=${recaptchaToken}`
+      `https://www.google.com/recaptcha/api/siteverify?secret=${process.env.CAPTCHA_SECRET_KEY}&response=${recaptchaToken}`,
     );
 
     if (!recaptchaResponse.data.success) {
@@ -387,68 +267,34 @@ export const createGuestPaymentIntent = async (
 export const createGuestBooking = async (
   req: Request,
   res: Response,
-  next: NextFunction
+  next: NextFunction,
 ) => {
   const { slotIds, paymentId, paymentStatus, guestInfo } = req.body;
 
   try {
-    const guestUser = await prisma.user.create({
-      data: {
-        email: guestInfo.email,
-        name: guestInfo.name,
-        ...(guestInfo.phone && { phone: guestInfo.phone }),
-        role: "guest",
-      },
-    });
-
-    const slots = await prisma.slot.findMany({
-      where: {
-        id: { in: slotIds },
-        status: "available",
-      },
-    });
-
-    if (slots.length !== slotIds.length) {
-      res.status(400).json({
-        message: "One or more slots are not available or don't exist",
-        error: "SLOT_NOT_AVAILABLE",
-      });
-      return;
-    }
-
-    const booking = await prisma.booking.create({
-      data: {
-        user: {
-          connect: { id: guestUser.id },
-        },
-        slots: {
-          connect: slotIds.map((id: number) => ({ id })),
-        },
-        status: "pending",
-        paymentId,
-        paymentStatus,
-      },
-      include: {
-        slots: true,
-      },
-    });
-
-    // Update slots status
-    await prisma.slot.updateMany({
-      where: {
-        id: { in: slotIds },
-      },
-      data: {
-        status: "booked",
-      },
+    const booking = await BookingService.createBooking({
+      slotIds,
+      paymentId,
+      paymentStatus,
+      guestInfo,
     });
 
     res.status(201).json({
       message: "Guest booking created successfully",
       booking,
-      guestEmail: guestUser.email,
+      guestEmail: guestInfo.email,
     });
   } catch (error) {
+    if (
+      (error as Error).message ===
+      "One or more slots do not exist or have been booked"
+    ) {
+      res.status(400).json({
+        message: (error as Error).message,
+        error: "SLOT_NOT_AVAILABLE",
+      });
+      return;
+    }
     next(error);
   }
 };
@@ -456,7 +302,7 @@ export const createGuestBooking = async (
 export const getBookingByPaymentId = async (
   req: Request,
   res: Response,
-  next: NextFunction
+  next: NextFunction,
 ) => {
   const { paymentId } = req.params;
 

@@ -6,10 +6,10 @@ import {
   beforeEach,
   afterAll,
 } from "@jest/globals";
-import { Request, Response, NextFunction } from "express";
+import { Response, NextFunction } from "express";
 import jwt from "jsonwebtoken";
 import { authenticateToken } from "./authenticate-token";
-import { AuthenticatedRequest } from "../interfaces/common.i";
+import { AuthenticatedRequest } from "@interfaces";
 
 jest.mock("jsonwebtoken");
 
@@ -40,16 +40,13 @@ describe("Authenticate Token Middleware", () => {
   });
 
   it("should call next() if token is valid", () => {
-    // Arrange
     const mockUserPayload = { id: 1, email: "test@test.com" };
     req.cookies = { accessToken: "valid-token" };
 
     (jwt.verify as jest.Mock).mockReturnValue(mockUserPayload);
 
-    // Act
     authenticateToken(req as AuthenticatedRequest, res as Response, next);
 
-    // Assert
     expect(jwt.verify).toHaveBeenCalledWith("valid-token", "test-secret");
     expect(req.currentUser).toEqual(mockUserPayload);
     expect(next).toHaveBeenCalled();
@@ -57,34 +54,28 @@ describe("Authenticate Token Middleware", () => {
   });
 
   it("should return 401 if access token is missing", () => {
-    // Arrange
     req.cookies = {};
 
-    // Act
     authenticateToken(req as AuthenticatedRequest, res as Response, next);
 
-    // Assert
     expect(res.status).toHaveBeenCalledWith(401);
     expect(res.json).toHaveBeenCalledWith(
-      expect.objectContaining({ error: "No access token" })
+      expect.objectContaining({ error: "No access token" }),
     );
     expect(next).not.toHaveBeenCalled();
   });
 
   it("should return 403 if token is invalid or expired", () => {
-    // Arrange
     req.cookies = { accessToken: "invalid-token" };
     (jwt.verify as jest.Mock).mockImplementation(() => {
       throw new Error("Invalid token");
     });
 
-    // Act
     authenticateToken(req as AuthenticatedRequest, res as Response, next);
 
-    // Assert
     expect(res.status).toHaveBeenCalledWith(403);
     expect(res.json).toHaveBeenCalledWith(
-      expect.objectContaining({ message: "Invalid or expired access token" })
+      expect.objectContaining({ message: "Invalid or expired access token" }),
     );
     expect(next).not.toHaveBeenCalled();
   });

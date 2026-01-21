@@ -58,13 +58,44 @@ const loginSchema = Joi.object({
     }),
 });
 
+/* 
+    Schema Validation 
+    - Name: Required, min 2 chars
+    - Email: Required, valid email format
+    - Phone: Optional, allow empty string
+    - Subject: Required, min 3 chars
+    - Message: Required, min 10 chars
+  */
+export const contactSchema = Joi.object({
+  name: Joi.string().min(2).required().messages({
+    "string.empty": "Name is required",
+    "any.required": "Name is required",
+    "string.min": "Name must be at least 2 characters",
+  }),
+  email: Joi.string().email().required().messages({
+    "string.empty": "Email is required",
+    "any.required": "Email is required",
+    "string.email": "Invalid email address",
+  }),
+  phone: Joi.string().allow("").optional(),
+  subject: Joi.string().min(3).required().messages({
+    "string.empty": "Subject is required",
+    "any.required": "Subject is required",
+    "string.min": "Subject must be at least 3 characters",
+  }),
+  message: Joi.string().min(10).required().messages({
+    "string.empty": "Message is required",
+    "any.required": "Message is required",
+    "string.min": "Message must be at least 10 characters",
+  }),
+});
+
 // Middleware for validating registration
 export const validateRegistration = (
   req: Request,
   res: Response,
-  next: NextFunction
+  next: NextFunction,
 ) => {
-  console.log(req.body);
   const { error } = registrationSchema.validate(req.body);
   if (error) {
     res.status(400).json({ message: error.details[0].message });
@@ -77,7 +108,7 @@ export const validateRegistration = (
 export const validateLogin = (
   req: Request,
   res: Response,
-  next: NextFunction
+  next: NextFunction,
 ) => {
   const { error } = loginSchema.validate(req.body);
   if (error) {

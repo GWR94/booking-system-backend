@@ -1,5 +1,5 @@
 import { Response, NextFunction } from "express";
-import { AuthenticatedRequest } from "../interfaces/common.i";
+import { AuthenticatedRequest } from "@interfaces";
 
 const authorizeAdmin = async (
   req: AuthenticatedRequest,

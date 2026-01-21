@@ -7,6 +7,23 @@
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
     "outDir": "./dist",
+    "baseUrl": "./src",
+    "paths": {
+      "@controllers": ["controllers/index", "controllers"],
+      "@controllers/*": ["controllers/*"],
+      "@middleware": ["middleware/index", "middleware"],
+      "@middleware/*": ["middleware/*"],
+      "@utils": ["utils/index", "utils"],
+      "@utils/*": ["utils/*"],
+      "@config": ["config/index", "config"],
+      "@config/*": ["config/*"],
+      "@routes": ["routes/index", "routes"],
+      "@routes/*": ["routes/*"],
+      "@interfaces": ["interfaces/index", "interfaces"],
+      "@interfaces/*": ["interfaces/*"],
+      "@services": ["services/index", "services"],
+      "@services/*": ["services/*"]
+    },
     "types": ["jest", "node"],
     "typeRoots": ["./node_modules/@types", "./src/types"]
   },

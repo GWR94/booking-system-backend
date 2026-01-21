@@ -1,6 +1,22 @@
 module.exports = {
   preset: "ts-jest",
   testEnvironment: "node",
-  setupFilesAfterEnv: ["<rootDir>/src/__test__/setupTest.ts"],
+  setupFilesAfterEnv: ["<rootDir>/src/__test__/setupTests.ts"],
   modulePathIgnorePatterns: ["<rootDir>/dist/"],
+  moduleNameMapper: {
+    "^@controllers$": "<rootDir>/src/controllers/index",
+    "^@controllers/(.*)$": "<rootDir>/src/controllers/$1",
+    "^@middleware$": "<rootDir>/src/middleware/index",
+    "^@middleware/(.*)$": "<rootDir>/src/middleware/$1",
+    "^@utils$": "<rootDir>/src/utils/index",
+    "^@utils/(.*)$": "<rootDir>/src/utils/$1",
+    "^@config$": "<rootDir>/src/config/index",
+    "^@config/(.*)$": "<rootDir>/src/config/$1",
+    "^@routes$": "<rootDir>/src/routes/index",
+    "^@routes/(.*)$": "<rootDir>/src/routes/$1",
+    "^@interfaces$": "<rootDir>/src/interfaces/index",
+    "^@interfaces/(.*)$": "<rootDir>/src/interfaces/$1",
+    "^@services$": "<rootDir>/src/services/index",
+    "^@services/(.*)$": "<rootDir>/src/services/$1",
+  },
 };

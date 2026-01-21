@@ -13,11 +13,16 @@ import {
   createSubscriptionSession,
   createPortalSession,
   unlinkProvider,
-} from "../controllers/user.controller";
-import authenticateToken from "../middleware/authenticate-token";
-import passiveAuthenticate from "../middleware/passive-authenticate";
-import passport from "../config/passport";
-import { validateRegistration, validateLogin } from "../middleware/validation";
+  requestPasswordReset,
+  resetPassword,
+} from "@controllers";
+import {
+  authenticateToken,
+  passiveAuthenticate,
+  validateRegistration,
+  validateLogin,
+} from "@middleware";
+import { passport } from "@config";
 
 const router = Router();
 
@@ -33,46 +38,46 @@ router.post("/logout", logoutUser);
 router.get(
   "/login/google",
   passiveAuthenticate,
-  passport.authenticate("google", { scope: ["profile", "email"] })
+  passport.authenticate("google", { scope: ["profile", "email"] }),
 );
 
 router.get(
   "/login/google/callback",
   passiveAuthenticate,
   passport.authenticate("google", { session: false }),
-  setOAuthTokensThenRedirect
+  setOAuthTokensThenRedirect,
 );
 
 router.get(
   "/login/facebook",
   passiveAuthenticate,
-  passport.authenticate("facebook")
+  passport.authenticate("facebook"),
 );
 
 router.get(
   "/login/facebook/callback",
   passiveAuthenticate,
   passport.authenticate("facebook", { session: false }),
-  setOAuthTokensThenRedirect
+  setOAuthTokensThenRedirect,
 );
 
 router.get(
   "/login/twitter",
   passiveAuthenticate,
-  passport.authenticate("twitter")
+  passport.authenticate("twitter"),
 );
 
 router.get(
   "/login/twitter/callback",
   passiveAuthenticate,
   passport.authenticate("twitter", { session: false }),
-  setOAuthTokensThenRedirect
+  setOAuthTokensThenRedirect,
 );
 
 router.delete(
   "/social-connection/:provider",
   authenticateToken,
-  unlinkProvider
+  unlinkProvider,
 );
 
 router.delete("/profile/delete", authenticateToken, deleteUserProfile);
@@ -91,14 +96,18 @@ router.patch("/profile", authenticateToken, updateUser);
 router.post(
   "/subscription/create-session",
   authenticateToken,
-  createSubscriptionSession
+  createSubscriptionSession,
 );
 router.post(
   "/subscription/portal-session",
   authenticateToken,
-  createPortalSession
+  createPortalSession,
 );
 
 router.get("/check-email", checkEmailExists);
+
+// Password reset routes
+router.post("/request-password-reset", requestPasswordReset);
+router.post("/reset-password", resetPassword);
 
 export default router;

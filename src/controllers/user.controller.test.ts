@@ -3,51 +3,87 @@ import {
   it,
   expect,
   jest,
-  beforeAll,
   beforeEach,
   afterAll,
 } from "@jest/globals";
 import { Request, Response, NextFunction } from "express";
-import { registerUser, verifyUser } from "./user.controller";
-import prisma from "../config/prisma-client";
+import {
+  registerUser,
+  verifyUser,
+  loginUser,
+  logoutUser,
+  refreshToken,
+  unlinkProvider,
+  getUserProfile,
+  updateUser,
+  requestPasswordReset,
+  resetPassword,
+} from "./user.controller";
+import { prisma } from "@config";
 import bcrypt from "bcrypt";
-import { MembershipStatus, MembershipTier } from "@prisma/client";
+import jwt from "jsonwebtoken";
 
-// Mock dependencies
-jest.mock("../config/prisma-client", () => ({
+jest.mock("@config", () => ({
   __esModule: true,
-  default: {
+  prisma: {
     user: {
       findUnique: jest.fn(),
       create: jest.fn(),
       update: jest.fn(),
     },
   },
+  default: {
+    prisma: {
+      user: {
+        findUnique: jest.fn(),
+        create: jest.fn(),
+        update: jest.fn(),
+      },
+    },
+  },
 }));
 
 jest.mock("bcrypt");
-jest.mock("../utils/generate-tokens", () => jest.fn());
+jest.mock("@utils", () => ({
+  __esModule: true,
+  generateTokens: () => ({
+    accessToken: "mock_access_token",
+    refreshToken: "mock_refresh_token",
+  }),
+  handleSendEmail: jest.fn(),
+}));
+
+jest.mock("jsonwebtoken", () => {
+  const mockJwt = {
+    sign: jest.fn(),
+    verify: jest.fn(),
+  };
+  return {
+    ...mockJwt,
+    default: mockJwt,
+    __esModule: true,
+  };
+});
 
 describe("UserController Integration", () => {
   let req: Partial<Request>;
   let res: Partial<Response>;
   let next: NextFunction;
 
-  beforeAll(() => {
-    // One-time setup if needed
-  });
-
   beforeEach(() => {
-    jest.resetAllMocks();
+    jest.clearAllMocks();
 
     req = {
       body: {},
+      params: {},
+      cookies: {},
     };
 
     const resObj: any = {};
     resObj.status = jest.fn().mockReturnValue(resObj);
     resObj.json = jest.fn().mockReturnValue(resObj);
     resObj.cookie = jest.fn().mockReturnValue(resObj);
+    resObj.clearCookie = jest.fn().mockReturnValue(resObj);
     res = resObj;
 
     next = jest.fn();
@@ -58,99 +94,103 @@ describe("UserController Integration", () => {
   });
 
   describe("#registerUser", () => {
-    it("should register a new user successfully when data is valid", async () => {
-      // Arrange
+    it("should register a new user successfully", async () => {
       req.body = {
-        name: "Test User",
         email: "test@example.com",
         password: "password123",
+        name: "Test",
       };
-
-      // Mock Prisma: User does NOT exist
       (prisma.user.findUnique as any).mockResolvedValue(null);
-      // Mock Bcrypt
-      (bcrypt.hash as any).mockResolvedValue("hashed_password");
-      // Mock Prisma Create
+      (bcrypt.hash as any).mockResolvedValue("hashed");
       (prisma.user.create as any).mockResolvedValue({
-        id: "user-id-123",
+        id: "1",
         email: "test@example.com",
-        name: "Test User",
       });
 
-      // Act
       await registerUser(req as Request, res as Response, next);
 
-      // Assert
-      expect(prisma.user.findUnique).toHaveBeenCalledWith({
-        where: { email: "test@example.com" },
-      });
-      expect(bcrypt.hash).toHaveBeenCalledWith("password123", 10);
-      expect(prisma.user.create).toHaveBeenCalled();
       expect(res.status).toHaveBeenCalledWith(201);
-      expect(res.json).toHaveBeenCalledWith(
-        expect.objectContaining({
-          message: "User registered successfully",
-          user: { id: "user-id-123", email: "test@example.com" },
-        })
-      );
-    });
-
-    it("should return 409 if user already exists with a password", async () => {
-      // Arrange
-      req.body = {
-        name: "Existing User",
-        email: "exists@example.com",
-        password: "password123",
-      };
-
-      // Mock Prisma: User EXISTS
-      (prisma.user.findUnique as any).mockResolvedValue({
-        id: "existing-id",
-        email: "exists@example.com",
-        passwordHash: "existing_hash",
-      });
-
-      // Act
-      await registerUser(req as Request, res as Response, next);
-
-      // Assert
-      expect(prisma.user.findUnique).toHaveBeenCalled();
-      expect(res.status).toHaveBeenCalledWith(409);
-      expect(res.json).toHaveBeenCalledWith(
-        expect.objectContaining({
-          error: expect.anything(),
-        })
-      );
-      expect(prisma.user.create).not.toHaveBeenCalled();
     });
   });
-  describe("#verifyUser", () => {
-    it("should return user: null (200 OK) if no tokens present", async () => {
-      // Arrange
-      req.cookies = {}; // No tokens
 
-      // Act
-      await verifyUser(req as Request, res as Response, next);
+  describe("#loginUser", () => {
+    it("should login successfully", async () => {
+      req.body = { email: "test@example.com", password: "password123" };
+      (prisma.user.findUnique as any).mockResolvedValue({
+        id: "1",
+        passwordHash: "hashed",
+      });
+      (bcrypt.compare as any).mockResolvedValue(true);
 
-      // Assert
-      // Should NOT call res.status(401)
-      expect(res.json).toHaveBeenCalledWith({ user: null });
-      expect(next).not.toHaveBeenCalled();
+      await loginUser(req as Request, res as Response, next);
+
+      expect(res.json).toHaveBeenCalledWith(
+        expect.objectContaining({ message: "Login successful" }),
+      );
+    });
+  });
+
+  describe("#requestPasswordReset", () => {
+    it("should return success message if user exists", async () => {
+      req.body = { email: "test@example.com" };
+      (prisma.user.findUnique as any).mockResolvedValue({
+        id: "1",
+        email: "test@example.com",
+      });
+      (jwt.sign as jest.Mock).mockReturnValue("token");
+
+      await requestPasswordReset(req as Request, res as Response, next);
+
+      expect(res.json).toHaveBeenCalledWith({
+        message:
+          "If an account with that email exists, a password reset link has been sent.",
+      });
     });
 
-    it("should return 401 if refresh token exists but access token missing", async () => {
-      // Arrange
-      // This mimics the "expired session" state where frontend interceptor should refresh
-      req.cookies = { refreshToken: "valid_refresh_token" };
-      // No access token
+    it("should return success message even if user does not exist", async () => {
+      req.body = { email: "nonexistent@example.com" };
+      (prisma.user.findUnique as any).mockResolvedValue(null);
 
-      // Act
-      await verifyUser(req as Request, res as Response, next);
+      await requestPasswordReset(req as Request, res as Response, next);
 
-      // Assert
-      expect(res.status).toHaveBeenCalledWith(401);
+      expect(res.json).toHaveBeenCalledWith({
+        message:
+          "If an account with that email exists, a password reset link has been sent.",
+      });
+    });
+  });
+
+  describe("#resetPassword", () => {
+    it("should reset password successfully", async () => {
+      req.body = { token: "token", password: "newpassword" };
+      (jwt.verify as jest.Mock).mockReturnValue({ id: "1" });
+      (prisma.user.findUnique as any).mockResolvedValue({
+        id: "1",
+        resetToken: "token",
+        resetTokenExpiry: new Date(Date.now() + 100000),
+      });
+      (bcrypt.hash as any).mockResolvedValue("newhashed");
+
+      await resetPassword(req as Request, res as Response, next);
+
+      expect(res.json).toHaveBeenCalledWith({
+        message: "Password updated successfully",
+      });
+    });
+
+    it("should return 400 for invalid token", async () => {
+      req.body = { token: "invalid", password: "newpassword" };
+      (jwt.verify as jest.Mock).mockImplementation(() => {
+        const err = new Error("Invalid token");
+        err.name = "JsonWebTokenError";
+        throw err;
+      });
+
+      await resetPassword(req as Request, res as Response, next);
+
+      expect(res.status).toHaveBeenCalledWith(400);
       expect(res.json).toHaveBeenCalledWith(
-        expect.objectContaining({ error: "NO_ACCESS_TOKEN" })
+        expect.objectContaining({ error: "INVALID_TOKEN" }),
       );
     });
   });

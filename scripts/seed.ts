@@ -1,14 +1,18 @@
-import { PrismaClient } from "@prisma/client";
-import { createBays } from "./createBay";
-import { createSlots } from "./populateSlots";
-import { initialiseAdmin } from "./initialiseAdmin";
+import prisma from "../src/config/prisma.config";
+import { createBays } from "./create-bay";
+import { createSlots } from "./populate-slots";
+import { initialiseAdmin } from "./initialise-admin";
 
-const prisma = new PrismaClient();
+if (!process.env.DATABASE_URL) {
+  console.error("❌ DATABASE_URL is not defined");
+  process.exit(1);
+}
 
+// Prisma client is imported from singleton
 async function main() {
-  await createBays();
-  await createSlots();
-  await initialiseAdmin();
+  await createBays(prisma);
+  await createSlots(prisma);
+  await initialiseAdmin(prisma);
 }
 
 main()
