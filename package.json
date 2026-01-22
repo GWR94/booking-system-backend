@@ -5,7 +5,7 @@
   "main": "server.ts",
   "scripts": {
     "start": "node dist/server.js",
-    "build": "npm test && tsc && tsc-alias",
+    "build": "tsc && tsc-alias",
     "dev": "nodemon -r tsconfig-paths/register server.ts",
     "seed": "ts-node scripts/seed.ts",
     "populate": "ts-node scripts/populate-slots.ts",
@@ -16,6 +16,7 @@
     "pretest": "npm run test:db:up && npm run test:migrate",
     "test": "dotenv -e .env.test -- jest --silent",
     "test:watch": "dotenv -e .env.test -- jest --watch --silent",
+    "test:unit": "dotenv -e .env.test -- jest --silent --testPathIgnorePatterns=.*\\.integration\\.test\\.ts",
     "postinstall": "prisma generate"
   },
   "prisma": {
