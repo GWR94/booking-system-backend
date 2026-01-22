@@ -1,4 +1,4 @@
-import { PrismaClient } from "@prisma/client";
+import { PrismaClient } from "../../prisma/generated/client";
 import { Pool } from "pg";
 import { PrismaPg } from "@prisma/adapter-pg";
 import path from "path";
@@ -14,20 +14,14 @@ if (!connectionString) {
   throw new Error("DATABASE_URL is missing. Initialization failed.");
 }
 
-let pool: Pool | undefined;
+const pool = new Pool({ connectionString });
+const adapter = new PrismaPg(pool);
 
 const prismaClientSingleton = () => {
-  const isAccelerate = connectionString.startsWith("prisma://");
-
-  if (isAccelerate) {
-    return new PrismaClient({
-      accelerateUrl: connectionString,
-    });
-  }
-
-  pool = new Pool({ connectionString });
-  const adapter = new PrismaPg(pool);
-  return new PrismaClient({ adapter });
+  return new PrismaClient({
+    adapter,
+    log: ["query", "info", "warn", "error"],
+  });
 };
 
 declare global {
@@ -38,9 +32,7 @@ const prisma = globalThis.prismaGlobal ?? prismaClientSingleton();
 
 export const disconnectDb = async () => {
   await prisma.$disconnect();
-  if (pool) {
-    await pool.end();
-  }
+  await pool.end();
 };
 
 export default prisma;

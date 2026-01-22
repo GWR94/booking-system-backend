@@ -1,7 +1,10 @@
 import { prisma, MEMBERSHIP_TIERS } from "@config";
 import { logger } from "@utils";
 import Stripe from "stripe";
-import { MembershipStatus, MembershipTier } from "@prisma/client";
+import {
+  MembershipStatus,
+  MembershipTier,
+} from "../../prisma/generated/client";
 
 export class MembershipService {
   /**

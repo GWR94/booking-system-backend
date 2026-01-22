@@ -74,3 +74,144 @@
 2026-01-21 23:49:01:491 warn: Prisma fetch failed, retrying once...
 2026-01-22 00:20:29:2029 warn: Prisma fetch failed, retrying once...
 2026-01-22 00:33:17:3317 warn: Prisma fetch failed, retrying once...
+2026-01-22 11:08:01:81 info: Database connected successfully
+2026-01-22 11:08:01:81 info: Server is running on port 4000
+2026-01-22 11:09:00:90 error: Error cleaning up stale bookings: PrismaClientKnownRequestError: 
+Invalid `prisma.booking.findMany()` invocation in
+C:\Users\james\Documents\GitHub\booking-system-backend\src\jobs\booking-cleanup.ts:37:46
+
+  34 let staleBookings = [];
+  35 try {
+  36   // Find bookings still pending that were created before the threshold
+→ 37   staleBookings = await prisma.booking.findMany(
+
+2026-01-22 11:09:28:928 info: Database connected successfully
+2026-01-22 11:09:28:928 info: Server is running on port 4000
+2026-01-22 11:10:00:100 error: Error cleaning up stale bookings: PrismaClientKnownRequestError: 
+Invalid `prisma.booking.findMany()` invocation in
+C:\Users\james\Documents\GitHub\booking-system-backend\src\jobs\booking-cleanup.ts:37:46
+
+  34 let staleBookings = [];
+  35 try {
+  36   // Find bookings still pending that were created before the threshold
+→ 37   staleBookings = await prisma.booking.findMany(
+
+2026-01-22 11:10:36:1036 info: Database connected successfully
+2026-01-22 11:10:36:1036 info: Server is running on port 4000
+2026-01-22 11:11:00:110 error: Error cleaning up stale bookings: PrismaClientKnownRequestError: 
+Invalid `prisma.booking.findMany()` invocation in
+C:\Users\james\Documents\GitHub\booking-system-backend\src\jobs\booking-cleanup.ts:37:46
+
+  34 let staleBookings = [];
+  35 try {
+  36   // Find bookings still pending that were created before the threshold
+→ 37   staleBookings = await prisma.booking.findMany(
+
+2026-01-22 11:12:00:120 error: Error cleaning up stale bookings: PrismaClientKnownRequestError: 
+Invalid `prisma.booking.findMany()` invocation in
+C:\Users\james\Documents\GitHub\booking-system-backend\src\jobs\booking-cleanup.ts:37:46
+
+  34 let staleBookings = [];
+  35 try {
+  36   // Find bookings still pending that were created before the threshold
+→ 37   staleBookings = await prisma.booking.findMany(
+
+2026-01-22 11:13:00:130 error: Error cleaning up stale bookings: PrismaClientKnownRequestError: 
+Invalid `prisma.booking.findMany()` invocation in
+C:\Users\james\Documents\GitHub\booking-system-backend\src\jobs\booking-cleanup.ts:37:46
+
+  34 let staleBookings = [];
+  35 try {
+  36   // Find bookings still pending that were created before the threshold
+→ 37   staleBookings = await prisma.booking.findMany(
+
+2026-01-22 11:14:00:140 error: Error cleaning up stale bookings: PrismaClientKnownRequestError: 
+Invalid `prisma.booking.findMany()` invocation in
+C:\Users\james\Documents\GitHub\booking-system-backend\src\jobs\booking-cleanup.ts:37:46
+
+  34 let staleBookings = [];
+  35 try {
+  36   // Find bookings still pending that were created before the threshold
+→ 37   staleBookings = await prisma.booking.findMany(
+
+2026-01-22 11:15:00:150 error: Error cleaning up stale bookings: PrismaClientKnownRequestError: 
+Invalid `prisma.booking.findMany()` invocation in
+C:\Users\james\Documents\GitHub\booking-system-backend\src\jobs\booking-cleanup.ts:37:46
+
+  34 let staleBookings = [];
+  35 try {
+  36   // Find bookings still pending that were created before the threshold
+→ 37   staleBookings = await prisma.booking.findMany(
+
+2026-01-22 11:16:00:160 error: Error cleaning up stale bookings: PrismaClientKnownRequestError: 
+Invalid `prisma.booking.findMany()` invocation in
+C:\Users\james\Documents\GitHub\booking-system-backend\src\jobs\booking-cleanup.ts:37:46
+
+  34 let staleBookings = [];
+  35 try {
+  36   // Find bookings still pending that were created before the threshold
+→ 37   staleBookings = await prisma.booking.findMany(
+
+2026-01-22 11:17:00:170 error: Error cleaning up stale bookings: PrismaClientKnownRequestError: 
+Invalid `prisma.booking.findMany()` invocation in
+C:\Users\james\Documents\GitHub\booking-system-backend\src\jobs\booking-cleanup.ts:37:46
+
+  34 let staleBookings = [];
+  35 try {
+  36   // Find bookings still pending that were created before the threshold
+→ 37   staleBookings = await prisma.booking.findMany(
+
+2026-01-22 11:18:00:180 error: Error cleaning up stale bookings: PrismaClientKnownRequestError: 
+Invalid `prisma.booking.findMany()` invocation in
+C:\Users\james\Documents\GitHub\booking-system-backend\src\jobs\booking-cleanup.ts:37:46
+
+  34 let staleBookings = [];
+  35 try {
+  36   // Find bookings still pending that were created before the threshold
+→ 37   staleBookings = await prisma.booking.findMany(
+
+2026-01-22 11:19:00:190 error: Error cleaning up stale bookings: PrismaClientKnownRequestError: 
+Invalid `prisma.booking.findMany()` invocation in
+C:\Users\james\Documents\GitHub\booking-system-backend\src\jobs\booking-cleanup.ts:37:46
+
+  34 let staleBookings = [];
+  35 try {
+  36   // Find bookings still pending that were created before the threshold
+→ 37   staleBookings = await prisma.booking.findMany(
+
+2026-01-22 11:20:00:200 error: Error cleaning up stale bookings: PrismaClientKnownRequestError: 
+Invalid `prisma.booking.findMany()` invocation in
+C:\Users\james\Documents\GitHub\booking-system-backend\src\jobs\booking-cleanup.ts:37:46
+
+  34 let staleBookings = [];
+  35 try {
+  36   // Find bookings still pending that were created before the threshold
+→ 37   staleBookings = await prisma.booking.findMany(
+
+2026-01-22 11:21:00:210 error: Error cleaning up stale bookings: PrismaClientKnownRequestError: 
+Invalid `prisma.booking.findMany()` invocation in
+C:\Users\james\Documents\GitHub\booking-system-backend\src\jobs\booking-cleanup.ts:37:46
+
+  34 let staleBookings = [];
+  35 try {
+  36   // Find bookings still pending that were created before the threshold
+→ 37   staleBookings = await prisma.booking.findMany(
+
+2026-01-22 11:23:14:2314 info: Database connected successfully
+2026-01-22 11:23:14:2314 info: Server is running on port 4000
+2026-01-22 11:23:36:2336 info: Database connected successfully
+2026-01-22 11:23:36:2336 info: Server is running on port 4000
+2026-01-22 11:28:22:2822 info: Database connected successfully
+2026-01-22 11:28:22:2822 info: Server is running on port 4000
+2026-01-22 11:29:08:298 info: Database connected successfully
+2026-01-22 11:29:08:298 info: Server is running on port 4000
+2026-01-22 11:38:16:3816 info: Database connected successfully
+2026-01-22 11:38:16:3816 info: Server is running on port 4000
+2026-01-22 11:40:52:4052 info: Database connected successfully
+2026-01-22 11:40:52:4052 info: Server is running on port 4000
+2026-01-22 13:48:53:4853 info: Database connected successfully
+2026-01-22 13:48:53:4853 info: Server is running on port 4000
+2026-01-22 13:54:51:5451 info: Database connected successfully
+2026-01-22 13:54:51:5451 info: Server is running on port 4000
+2026-01-22 13:54:57:5457 info: Database connected successfully
+2026-01-22 13:54:57:5457 info: Server is running on port 4000

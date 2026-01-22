@@ -67,3 +67,120 @@
     at Object.worker (C:\Users\james\Documents\GitHub\booking-system-backend\node_modules\jest-runner\build\testWorker.js:106:12)
 2026-01-21 23:43:59:4359 error: Error sending confirmation email: Error: SMTP Error
 2026-01-21 23:45:10:4510 error: Error sending confirmation email: Error: SMTP Error
+2026-01-22 11:09:00:90 error: Error cleaning up stale bookings: PrismaClientKnownRequestError: 
+Invalid `prisma.booking.findMany()` invocation in
+C:\Users\james\Documents\GitHub\booking-system-backend\src\jobs\booking-cleanup.ts:37:46
+
+  34 let staleBookings = [];
+  35 try {
+  36   // Find bookings still pending that were created before the threshold
+→ 37   staleBookings = await prisma.booking.findMany(
+
+2026-01-22 11:10:00:100 error: Error cleaning up stale bookings: PrismaClientKnownRequestError: 
+Invalid `prisma.booking.findMany()` invocation in
+C:\Users\james\Documents\GitHub\booking-system-backend\src\jobs\booking-cleanup.ts:37:46
+
+  34 let staleBookings = [];
+  35 try {
+  36   // Find bookings still pending that were created before the threshold
+→ 37   staleBookings = await prisma.booking.findMany(
+
+2026-01-22 11:11:00:110 error: Error cleaning up stale bookings: PrismaClientKnownRequestError: 
+Invalid `prisma.booking.findMany()` invocation in
+C:\Users\james\Documents\GitHub\booking-system-backend\src\jobs\booking-cleanup.ts:37:46
+
+  34 let staleBookings = [];
+  35 try {
+  36   // Find bookings still pending that were created before the threshold
+→ 37   staleBookings = await prisma.booking.findMany(
+
+2026-01-22 11:12:00:120 error: Error cleaning up stale bookings: PrismaClientKnownRequestError: 
+Invalid `prisma.booking.findMany()` invocation in
+C:\Users\james\Documents\GitHub\booking-system-backend\src\jobs\booking-cleanup.ts:37:46
+
+  34 let staleBookings = [];
+  35 try {
+  36   // Find bookings still pending that were created before the threshold
+→ 37   staleBookings = await prisma.booking.findMany(
+
+2026-01-22 11:13:00:130 error: Error cleaning up stale bookings: PrismaClientKnownRequestError: 
+Invalid `prisma.booking.findMany()` invocation in
+C:\Users\james\Documents\GitHub\booking-system-backend\src\jobs\booking-cleanup.ts:37:46
+
+  34 let staleBookings = [];
+  35 try {
+  36   // Find bookings still pending that were created before the threshold
+→ 37   staleBookings = await prisma.booking.findMany(
+
+2026-01-22 11:14:00:140 error: Error cleaning up stale bookings: PrismaClientKnownRequestError: 
+Invalid `prisma.booking.findMany()` invocation in
+C:\Users\james\Documents\GitHub\booking-system-backend\src\jobs\booking-cleanup.ts:37:46
+
+  34 let staleBookings = [];
+  35 try {
+  36   // Find bookings still pending that were created before the threshold
+→ 37   staleBookings = await prisma.booking.findMany(
+
+2026-01-22 11:15:00:150 error: Error cleaning up stale bookings: PrismaClientKnownRequestError: 
+Invalid `prisma.booking.findMany()` invocation in
+C:\Users\james\Documents\GitHub\booking-system-backend\src\jobs\booking-cleanup.ts:37:46
+
+  34 let staleBookings = [];
+  35 try {
+  36   // Find bookings still pending that were created before the threshold
+→ 37   staleBookings = await prisma.booking.findMany(
+
+2026-01-22 11:16:00:160 error: Error cleaning up stale bookings: PrismaClientKnownRequestError: 
+Invalid `prisma.booking.findMany()` invocation in
+C:\Users\james\Documents\GitHub\booking-system-backend\src\jobs\booking-cleanup.ts:37:46
+
+  34 let staleBookings = [];
+  35 try {
+  36   // Find bookings still pending that were created before the threshold
+→ 37   staleBookings = await prisma.booking.findMany(
+
+2026-01-22 11:17:00:170 error: Error cleaning up stale bookings: PrismaClientKnownRequestError: 
+Invalid `prisma.booking.findMany()` invocation in
+C:\Users\james\Documents\GitHub\booking-system-backend\src\jobs\booking-cleanup.ts:37:46
+
+  34 let staleBookings = [];
+  35 try {
+  36   // Find bookings still pending that were created before the threshold
+→ 37   staleBookings = await prisma.booking.findMany(
+
+2026-01-22 11:18:00:180 error: Error cleaning up stale bookings: PrismaClientKnownRequestError: 
+Invalid `prisma.booking.findMany()` invocation in
+C:\Users\james\Documents\GitHub\booking-system-backend\src\jobs\booking-cleanup.ts:37:46
+
+  34 let staleBookings = [];
+  35 try {
+  36   // Find bookings still pending that were created before the threshold
+→ 37   staleBookings = await prisma.booking.findMany(
+
+2026-01-22 11:19:00:190 error: Error cleaning up stale bookings: PrismaClientKnownRequestError: 
+Invalid `prisma.booking.findMany()` invocation in
+C:\Users\james\Documents\GitHub\booking-system-backend\src\jobs\booking-cleanup.ts:37:46
+
+  34 let staleBookings = [];
+  35 try {
+  36   // Find bookings still pending that were created before the threshold
+→ 37   staleBookings = await prisma.booking.findMany(
+
+2026-01-22 11:20:00:200 error: Error cleaning up stale bookings: PrismaClientKnownRequestError: 
+Invalid `prisma.booking.findMany()` invocation in
+C:\Users\james\Documents\GitHub\booking-system-backend\src\jobs\booking-cleanup.ts:37:46
+
+  34 let staleBookings = [];
+  35 try {
+  36   // Find bookings still pending that were created before the threshold
+→ 37   staleBookings = await prisma.booking.findMany(
+
+2026-01-22 11:21:00:210 error: Error cleaning up stale bookings: PrismaClientKnownRequestError: 
+Invalid `prisma.booking.findMany()` invocation in
+C:\Users\james\Documents\GitHub\booking-system-backend\src\jobs\booking-cleanup.ts:37:46
+
+  34 let staleBookings = [];
+  35 try {
+  36   // Find bookings still pending that were created before the threshold
+→ 37   staleBookings = await prisma.booking.findMany(
+

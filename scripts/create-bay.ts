@@ -1,4 +1,4 @@
-import { PrismaClient } from "@prisma/client";
+import { PrismaClient } from "../prisma/generated/client";
 
 async function createBays(prisma: PrismaClient) {
   console.log(`Seeding database...`);
