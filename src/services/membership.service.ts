@@ -4,7 +4,7 @@ import Stripe from "stripe";
 import {
   MembershipStatus,
   MembershipTier,
-} from "../../prisma/generated/client";
+} from "../../prisma/generated/prisma/client";
 
 export class MembershipService {
   /**

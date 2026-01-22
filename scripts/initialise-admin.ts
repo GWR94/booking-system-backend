@@ -1,4 +1,4 @@
-import { PrismaClient } from "../prisma/generated/client";
+import { PrismaClient } from "../prisma/generated/prisma/client";
 import bcrypt from "bcrypt";
 
 async function initialiseAdmin(prisma: PrismaClient) {
