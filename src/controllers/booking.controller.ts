@@ -1,7 +1,12 @@
 import { NextFunction, Request, Response } from "express";
 import { prisma, MEMBERSHIP_TIERS, MembershipTier } from "@config";
 import Stripe from "stripe";
-import { BasketItem, PRICE_PER_HOUR, AuthenticatedRequest } from "@interfaces";
+import {
+  BasketItem,
+  PEAK_RATE,
+  OFF_PEAK_RATE,
+  AuthenticatedRequest,
+} from "@interfaces";
 import { calculateBasketCost, groupSlotsByBay } from "@utils";
 import { BookingService } from "@services";
 import axios from "axios";
@@ -108,33 +113,31 @@ export const createPaymentIntent = async (
         const includedHours = tierConfig.includedHours;
         let remainingIncluded = Math.max(0, includedHours - usedHours);
 
-        let freeHours = 0;
-        let paidHours = 0;
-
-        // Iterate through all requested slots to determine which are eligible for 'included' hours
+        let totalDiscountedCost = 0;
         for (const item of items) {
           const start = dayjs(item.startTime);
-          const durationHours = item.slotIds.length; // Assuming 1 slot = 1 hour as per line 192
+          const durationHours = item.slotIds.length;
 
           for (let i = 0; i < durationHours; i++) {
             const slotTime = start.add(i, "hour");
             const dayOfWeek = slotTime.day(); // 0 = Sunday, 6 = Saturday
+            const hour = slotTime.hour();
             const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
+            const isPeak = isWeekend || hour >= 17;
+            const baseRate = isPeak ? PEAK_RATE : OFF_PEAK_RATE;
+
             const isEligibleForFree = tierConfig.weekendAccess || !isWeekend;
 
             if (isEligibleForFree && remainingIncluded > 0) {
-              freeHours++;
               remainingIncluded--;
+              // Free hour, cost stays 0
             } else {
-              paidHours++;
+              totalDiscountedCost += baseRate * (1 - tierConfig.discount);
             }
           }
         }
 
-        const costForPaid = paidHours * PRICE_PER_HOUR;
-        const discountedCost = costForPaid * (1 - tierConfig.discount);
-
-        finalAmount = Math.round(discountedCost);
+        finalAmount = Math.round(totalDiscountedCost);
       }
     }
 

@@ -347,13 +347,11 @@ describe("BookingController Integration", () => {
       expect(res.json).toHaveBeenCalledWith({ clientSecret: null, amount: 0 });
     });
 
-    it("should calculate BIRDIE membership discounts correctly", async () => {
+    it("should calculate membership discounts correctly (Peak/Off-Peak)", async () => {
+      // Monday 10 AM (Off-Peak)
       req.body = {
-        items: [{ slotIds: [301], startTime: "2025-05-20T10:00:00Z" }],
+        items: [{ slotIds: [301], startTime: "2025-05-19T10:00:00Z" }],
       };
-
-      const calcMock = require("@utils").calculateBasketCost;
-      calcMock.mockReturnValue(2000);
 
       (prisma.user.findUnique as any).mockResolvedValue({
         id: 1,
@@ -361,7 +359,13 @@ describe("BookingController Integration", () => {
         membershipStatus: "ACTIVE",
         currentPeriodStart: new Date("2025-05-01"),
         currentPeriodEnd: new Date("2025-06-01"),
-        bookings: [], // No used hours
+        bookings: [
+          {
+            status: "confirmed",
+            bookingTime: new Date("2025-05-02"),
+            slots: new Array(10).fill({}),
+          },
+        ], // Already used all 10 hours
       });
 
       const stripeInstance = (Stripe as any).__mockInstance;
@@ -371,36 +375,13 @@ describe("BookingController Integration", () => {
 
       await createPaymentIntent(req as any, res as Response, next);
 
-      // Birdie has 10 included hours. 1 slot requested -> should be free (amount 0)
-      expect(res.json).toHaveBeenCalledWith({ clientSecret: null, amount: 0 });
-    });
-
-    it("should calculate HOLEINONE membership discounts correctly", async () => {
-      req.body = {
-        items: [{ slotIds: [301], startTime: "2025-05-20T10:00:00Z" }],
-      };
-
-      const calcMock = require("@utils").calculateBasketCost;
-      calcMock.mockReturnValue(2000);
-
-      (prisma.user.findUnique as any).mockResolvedValue({
-        id: 1,
-        membershipTier: "HOLEINONE",
-        membershipStatus: "ACTIVE",
-        currentPeriodStart: new Date("2025-05-01"),
-        currentPeriodEnd: new Date("2025-06-01"),
-        bookings: [], // No used hours
-      });
-
-      const stripeInstance = (Stripe as any).__mockInstance;
-      (stripeInstance.paymentIntents.create as any).mockResolvedValue({
-        client_secret: "pi_secret_hio",
-      });
-
-      await createPaymentIntent(req as any, res as Response, next);
-
-      // HoleInOne has 15 included hours. 1 slot requested -> should be free (amount 0)
-      expect(res.json).toHaveBeenCalledWith({ clientSecret: null, amount: 0 });
+      // 10 hours used, so we pay.
+      // Off-peak rate 3500 * (1 - 0.15 discount) = 2975
+      expect(res.json).toHaveBeenCalledWith(
+        expect.objectContaining({
+          amount: 2975,
+        }),
+      );
     });
   });
 

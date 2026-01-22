@@ -1,24 +1,54 @@
 import { describe, it, expect } from "@jest/globals";
 import calculateBasketCost from "./calculate-basket-cost";
+import { PEAK_RATE, OFF_PEAK_RATE } from "../interfaces/booking.i";
 
 describe("calculateBasketCost", () => {
-  it("should sum up prices correctly", () => {
-    // 3 items, each with 1 slot. Total 3 slots.
-    // 3 * 4500 = 13500
+  it("should calculate Off-Peak cost correctly (Weekday 10 AM)", () => {
     const basket = [
-      { slotIds: [1] },
-      { slotIds: [2] },
-      { slotIds: [3] },
+      {
+        startTime: "2024-01-22T10:00:00Z", // Wednesday
+        slotIds: [1],
+      },
     ] as any;
     const total = calculateBasketCost(basket);
-    expect(total).toBe(13500);
+    expect(total).toBe(OFF_PEAK_RATE);
   });
 
-  it("should handle multiple slots in one item", () => {
-    // 1 item with 2 slots.
-    // 2 * 4500 = 9000
-    const basket = [{ slotIds: [1, 2] }] as any;
-    expect(calculateBasketCost(basket)).toBe(9000);
+  it("should calculate Peak cost correctly (Weekday 6 PM)", () => {
+    const basket = [
+      {
+        startTime: "2024-01-22T18:00:00Z", // Wednesday
+        slotIds: [1],
+      },
+    ] as any;
+    const total = calculateBasketCost(basket);
+    expect(total).toBe(PEAK_RATE);
+  });
+
+  it("should calculate Peak cost correctly (Saturday)", () => {
+    const basket = [
+      {
+        startTime: "2024-01-20T10:00:00Z", // Saturday
+        slotIds: [1],
+      },
+    ] as any;
+    const total = calculateBasketCost(basket);
+    expect(total).toBe(PEAK_RATE);
+  });
+
+  it("should handle mixed Peak and Off-Peak items", () => {
+    const basket = [
+      {
+        startTime: "2024-01-22T10:00:00Z", // Off-Peak
+        slotIds: [1],
+      },
+      {
+        startTime: "2024-01-22T18:00:00Z", // Peak
+        slotIds: [2, 3], // 2 slots
+      },
+    ] as any;
+    const total = calculateBasketCost(basket);
+    expect(total).toBe(OFF_PEAK_RATE + 2 * PEAK_RATE);
   });
 
   it("should return 0 for empty basket", () => {

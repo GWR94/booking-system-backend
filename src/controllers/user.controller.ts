@@ -4,6 +4,7 @@ import jwt from "jsonwebtoken";
 import { prisma, MEMBERSHIP_TIERS, MembershipTier } from "@config";
 import { generateTokens, handleSendEmail, logger } from "@utils";
 import { User, UserPayload, AuthenticatedRequest } from "@interfaces";
+import { MembershipService } from "@services";
 import Stripe from "stripe";
 
 const SALT_ROUNDS = 10;
@@ -146,8 +147,14 @@ export const verifyUser = async (
 
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const { passwordHash, ...safeUser } = user;
+
+    const membershipUsage = await MembershipService.getUsageStats(user as any);
+
     res.json({
-      user: safeUser,
+      user: {
+        ...safeUser,
+        membershipUsage,
+      },
     });
   } catch (error) {
     next(error);

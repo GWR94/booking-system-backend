@@ -25,7 +25,7 @@ const prismaClientSingleton = () => {
   if (isAccelerate) {
     return new PrismaClient({
       accelerateUrl: connectionString,
-      log: ["query", "info", "warn", "error"],
+      log: ["warn", "error"],
     }).$extends(withAccelerate());
   } else {
     pool = new Pool({
@@ -38,7 +38,7 @@ const prismaClientSingleton = () => {
     const adapter = new PrismaPg(pool);
     return new PrismaClient({
       adapter,
-      log: ["query", "info", "warn", "error"],
+      log: ["warn", "error"],
     });
   }
 };

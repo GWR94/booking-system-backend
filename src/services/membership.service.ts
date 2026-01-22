@@ -62,4 +62,66 @@ export class MembershipService {
       throw error;
     }
   }
+
+  public static async getUsageStats(user: {
+    id: number;
+    membershipTier: MembershipTier | null;
+    membershipStatus: MembershipStatus | null;
+    currentPeriodStart: Date | null;
+    currentPeriodEnd: Date | null;
+  }) {
+    if (
+      !user.membershipTier ||
+      user.membershipStatus !== MembershipStatus.ACTIVE ||
+      !user.currentPeriodStart ||
+      !user.currentPeriodEnd
+    ) {
+      return null;
+    }
+
+    try {
+      const tierConfig = MEMBERSHIP_TIERS[user.membershipTier];
+      if (!tierConfig) return null;
+
+      const bookings = await prisma.booking.findMany({
+        where: {
+          userId: user.id,
+          status: { in: ["confirmed", "pending"] },
+          bookingTime: {
+            gte: user.currentPeriodStart,
+            lte: user.currentPeriodEnd,
+          },
+        },
+        include: { slots: true },
+      });
+
+      let usedHours = 0;
+      bookings.forEach((booking) => {
+        booking.slots.forEach((slot) => {
+          const slotTime = new Date(slot.startTime);
+          const dayOfWeek = slotTime.getDay(); // 0 = Sunday, 6 = Saturday
+          const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
+          const isEligible = tierConfig.weekendAccess || !isWeekend;
+
+          if (isEligible) {
+            usedHours++;
+          }
+        });
+      });
+
+      const totalHours = tierConfig.includedHours;
+      const remainingHours = Math.max(0, totalHours - usedHours);
+
+      return {
+        usedHours,
+        totalHours,
+        remainingHours,
+      };
+    } catch (error) {
+      logger.error(
+        `Error calculating usage stats for user ${user.id}: ${error}`,
+      );
+      return null;
+    }
+  }
 }
