@@ -1,8 +1,5 @@
 import { PrismaClient } from "@prisma/client";
 
-const prisma = new PrismaClient();
-
-// Define the start and end times for each of the slots per day
 const timeSlots = [
   { start: "10:00", end: "10:55" },
   { start: "11:00", end: "11:55" },
@@ -21,14 +18,12 @@ const timeSlots = [
 const daysToCreate = 365;
 const noOfBays = 4;
 
-async function createSlots() {
-  // First, ensure bays exist
+async function createSlots(prisma: PrismaClient) {
   const bays = await prisma.bay.findMany();
   if (bays.length === 0) {
     throw new Error("No bays found. Please run createBay.ts first");
   }
 
-  // Iterate over daysToCreate days starting today
   for (let i = 0; i < daysToCreate; i++) {
     const date = new Date();
     date.setDate(date.getDate() + i);
@@ -39,48 +34,39 @@ async function createSlots() {
       continue;
     }
 
-    // Create slots for each time slot on the current day
+    const slotsToCreate = [];
+
     for (const slot of timeSlots) {
       const startTime = new Date(date);
       const endTime = new Date(date);
 
       startTime.setHours(parseInt(slot.start.split(":")[0]));
       startTime.setMinutes(parseInt(slot.start.split(":")[1]));
+      startTime.setSeconds(0);
+      startTime.setMilliseconds(0);
+
       endTime.setHours(parseInt(slot.end.split(":")[0]));
       endTime.setMinutes(parseInt(slot.end.split(":")[1]));
+      endTime.setSeconds(0);
+      endTime.setMilliseconds(0);
 
-      // Create a slot document for each bay
       for (const bay of bays) {
-        await prisma.slot.create({
-          data: {
-            startTime,
-            endTime,
-            status: "available",
-            bayId: bay.id,
-          },
+        slotsToCreate.push({
+          startTime: new Date(startTime),
+          endTime: new Date(endTime),
+          status: "available",
+          bayId: bay.id,
         });
       }
     }
+
+    if (slotsToCreate.length > 0) {
+      await prisma.slot.createMany({
+        data: slotsToCreate,
+        skipDuplicates: true,
+      });
+    }
   }
-}
-
-async function main() {
-  console.log(
-    `Seeding slots for ${daysToCreate} days ahead for each of the ${noOfBays} bays into the database...`
-  );
-  await createSlots();
-  console.log("Slots seeded successfully!");
-}
-
-if (require.main === module) {
-  main()
-    .catch((e) => {
-      console.error(e);
-      process.exit(1);
-    })
-    .finally(async () => {
-      await prisma.$disconnect();
-    });
 }
 
 export { createSlots };

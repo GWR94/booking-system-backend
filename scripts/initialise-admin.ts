@@ -1,9 +1,7 @@
 import { PrismaClient } from "@prisma/client";
 import bcrypt from "bcrypt";
 
-const prisma = new PrismaClient();
-
-async function initialiseAdmin() {
+async function initialiseAdmin(prisma: PrismaClient) {
   const adminEmail = process.env.ADMIN_EMAIL as string;
   const existingAdmin = await prisma.user.findUnique({
     where: { email: adminEmail, role: "admin" },
@@ -28,19 +26,4 @@ async function initialiseAdmin() {
   });
 }
 
-async function main() {
-  await initialiseAdmin();
-  console.log("Admin user created");
-}
-
-if (require.main === module) {
-  main()
-    .catch((e) => {
-      console.error(e);
-      process.exit(1);
-    })
-    .finally(async () => {
-      await prisma.$disconnect();
-    });
-}
 export { initialiseAdmin };

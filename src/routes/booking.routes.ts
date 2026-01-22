@@ -1,25 +1,15 @@
 import { Router } from "express";
 import {
-  createAdminBooking,
   cancelBooking,
   createPaymentIntent,
   createBooking,
   createGuestBooking,
   createGuestPaymentIntent,
   getBookingByPaymentId,
-} from "../controllers/booking.controller";
-import authenticateToken from "../middleware/authenticate-token";
-import authorizeAdmin from "../middleware/authorize-admin";
+} from "@controllers";
+import { authenticateToken } from "@middleware";
 
 export const router = Router();
-
-// Route to create a new admin booking (authenticated users)
-router.post(
-  "/local-book",
-  authenticateToken,
-  authorizeAdmin,
-  createAdminBooking
-);
 
 router.post("/guest", createGuestBooking);
 

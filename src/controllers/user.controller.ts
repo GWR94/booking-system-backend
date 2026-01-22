@@ -1,11 +1,9 @@
 import { CookieOptions, NextFunction, Request, Response } from "express";
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
-import prisma from "../config/prisma-client";
-import generateTokens from "../utils/generate-tokens";
-import { User, UserPayload } from "../interfaces/user.i";
-import { AuthenticatedRequest } from "../interfaces/common.i";
-import { MEMBERSHIP_TIERS, MembershipTier } from "../config/membership.config";
+import { prisma, MEMBERSHIP_TIERS, MembershipTier } from "@config";
+import { generateTokens, handleSendEmail, logger } from "@utils";
+import { User, UserPayload, AuthenticatedRequest } from "@interfaces";
 import Stripe from "stripe";
 
 const SALT_ROUNDS = 10;
@@ -36,16 +34,14 @@ const refreshTokenConfig: CookieOptions = {
   domain,
 };
 
-// Register a new user
 export const registerUser = async (
   req: Request,
   res: Response,
-  next: NextFunction
+  next: NextFunction,
 ) => {
   const { name, email, password } = req.body;
 
   try {
-    // Check if the user exists
     const userExists = await prisma.user.findUnique({
       where: { email },
     });
@@ -58,7 +54,6 @@ export const registerUser = async (
       return;
     }
 
-    // Hash the password before saving
     const passwordHash = await bcrypt.hash(password, SALT_ROUNDS);
 
     if (userExists) {
@@ -76,7 +71,6 @@ export const registerUser = async (
       return;
     }
 
-    // Create new user in the database
     const user = await prisma.user.create({
       data: {
         name,
@@ -95,11 +89,10 @@ export const registerUser = async (
   }
 };
 
-// verify user
 export const verifyUser = async (
   req: Request,
   res: Response,
-  next: NextFunction
+  next: NextFunction,
 ) => {
   try {
     const { accessToken, refreshToken } = req.cookies;
@@ -123,7 +116,7 @@ export const verifyUser = async (
 
     const decoded = jwt.verify(
       accessToken,
-      process.env.ACCESS_TOKEN_SECRET as string
+      process.env.ACCESS_TOKEN_SECRET as string,
     ) as User;
 
     const user = await prisma.user.findUnique({
@@ -133,7 +126,11 @@ export const verifyUser = async (
       include: {
         bookings: {
           include: {
-            slots: true,
+            slots: {
+              include: {
+                bay: true,
+              },
+            },
           },
         },
       },
@@ -157,16 +154,14 @@ export const verifyUser = async (
   }
 };
 
-// Login user
 export const loginUser = async (
   req: Request,
   res: Response,
-  next: NextFunction
+  next: NextFunction,
 ) => {
   const { email, password, rememberMe = false } = req.body;
 
   try {
-    // Check if the user exists
     const user = await prisma.user.findUnique({
       where: { email },
     });
@@ -187,7 +182,6 @@ export const loginUser = async (
       return;
     }
 
-    // Verify password
     const validPassword = await bcrypt.compare(password, user.passwordHash);
 
     if (!validPassword) {
@@ -219,7 +213,7 @@ export const loginUser = async (
 export const checkEmailExists = async (
   req: Request,
   res: Response,
-  next: NextFunction
+  next: NextFunction,
 ) => {
   const { email } = req.query;
 
@@ -235,7 +229,7 @@ export const checkEmailExists = async (
 
     res.json({ exists: true, role: user.role });
   } catch (error) {
-    console.error("Error checking email:", error);
+    logger.error(`Error checking email: ${error}`);
     res.json({ exists: false, error: true });
   }
 };
@@ -243,7 +237,7 @@ export const checkEmailExists = async (
 export const setOAuthTokensThenRedirect = (
   req: AuthenticatedRequest,
   res: Response,
-  next: NextFunction
+  next: NextFunction,
 ) => {
   const user = req.user as UserPayload;
   try {
@@ -256,11 +250,14 @@ export const setOAuthTokensThenRedirect = (
     }
     const { accessToken, refreshToken } = generateTokens(user);
     res.cookie("accessToken", accessToken, accessTokenConfig);
-    res.cookie("refreshToken", refreshToken, refreshTokenConfig);
+    res.cookie("refreshToken", refreshToken, {
+      ...refreshTokenConfig,
+      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+    });
     res.redirect(process.env.FRONT_END as string);
     return;
   } catch (error) {
-    console.error("Error in setOAuthTokensThenRedirect:", error);
+    logger.error(`Error in setOAuthTokensThenRedirect: ${error}`);
     next(error);
   }
 };
@@ -268,10 +265,14 @@ export const setOAuthTokensThenRedirect = (
 export const updateUser = async (
   req: AuthenticatedRequest,
   res: Response,
-  next: NextFunction
+  next: NextFunction,
 ) => {
-  const user = req.user as UserPayload;
+  const user = (req.user || req.currentUser) as UserPayload;
   try {
+    if (!user) {
+      res.status(401).json({ message: "Unauthorized" });
+      return;
+    }
     const updated = await prisma.user.update({
       where: { id: user.id },
       data: {
@@ -287,7 +288,7 @@ export const updateUser = async (
 export const refreshToken = async (
   req: Request,
   res: Response,
-  next: NextFunction
+  next: NextFunction,
 ) => {
   const { refreshToken } = req.cookies;
   if (!refreshToken) {
@@ -300,17 +301,16 @@ export const refreshToken = async (
 
   const decoded = jwt.verify(
     refreshToken,
-    process.env.REFRESH_TOKEN_SECRET as string
+    process.env.REFRESH_TOKEN_SECRET as string,
   ) as UserPayload;
 
   try {
-    // Verify refresh token
     const user = await prisma.user.findUnique({
       where: { id: decoded.id },
     });
 
     const { accessToken, refreshToken: newRefreshToken } = generateTokens(
-      user as User
+      user as User,
     );
 
     res.cookie("accessToken", accessToken, accessTokenConfig);
@@ -327,11 +327,10 @@ export const logoutUser = (req: Request, res: Response) => {
   res.json({ message: "Logged out successfully" });
 };
 
-// Get user profile (protected route)
 export const getUserProfile = async (
   req: AuthenticatedRequest,
   res: Response,
-  next: NextFunction
+  next: NextFunction,
 ) => {
   if (!req.currentUser) {
     res.status(400).json({
@@ -372,7 +371,7 @@ export const getUserProfile = async (
 export const deleteUserProfile = async (
   req: AuthenticatedRequest,
   res: Response,
-  next: NextFunction
+  next: NextFunction,
 ) => {
   if (!req.currentUser) {
     res.status(400).json({
@@ -395,7 +394,7 @@ export const deleteUserProfile = async (
 export const createSubscriptionSession = async (
   req: AuthenticatedRequest,
   res: Response,
-  next: NextFunction
+  next: NextFunction,
 ) => {
   const tokenUser = req.currentUser;
   const { tier } = req.body;
@@ -472,7 +471,7 @@ export const createSubscriptionSession = async (
 export const createPortalSession = async (
   req: AuthenticatedRequest,
   res: Response,
-  next: NextFunction
+  next: NextFunction,
 ) => {
   const tokenUser = req.currentUser;
 
@@ -504,7 +503,7 @@ export const createPortalSession = async (
 export const unlinkProvider = async (
   req: AuthenticatedRequest,
   res: Response,
-  next: NextFunction
+  next: NextFunction,
 ) => {
   const { provider } = req.params;
   const userPayload = req.currentUser;
@@ -531,15 +530,15 @@ export const unlinkProvider = async (
     }
 
     // Safety Check: Prevent lockout
-    const activeProviders = [
+    const activeProviderCount = [
       user.googleId,
       user.facebookId,
       user.twitterId,
-    ].filter(Boolean).length;
+    ].filter((id) => !!id).length;
 
     const hasPassword = !!user.passwordHash;
 
-    if (!hasPassword && activeProviders <= 1) {
+    if (!hasPassword && activeProviderCount <= 1) {
       res.status(400).json({
         message:
           "Cannot disconnect your only login method. Please set a password or connect another account first.",
@@ -548,7 +547,6 @@ export const unlinkProvider = async (
       return;
     }
 
-    // Unlink
     const updatedUser = await prisma.user.update({
       where: { id: user.id },
       data: {
@@ -571,6 +569,121 @@ export const unlinkProvider = async (
       user: updatedUser,
     });
   } catch (error) {
+    next(error);
+  }
+};
+
+export const requestPasswordReset = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+) => {
+  const { email } = req.body;
+  const safetyMessage =
+    "If an account with that email exists, a password reset link has been sent.";
+
+  try {
+    const user = await prisma.user.findUnique({ where: { email } });
+
+    if (!user) {
+      // For security, always send a success message even if user not found
+      res.json({
+        message: safetyMessage,
+      });
+      return;
+    }
+
+    const resetToken = jwt.sign(
+      { id: user.id, email: user.email },
+      process.env.ACCESS_TOKEN_SECRET as string,
+      { expiresIn: "1h" },
+    );
+    const resetTokenExpiry = new Date(Date.now() + 3600000); // 1 hour from now
+
+    await prisma.user.update({
+      where: { id: user.id },
+      data: {
+        resetToken,
+        resetTokenExpiry,
+      },
+    });
+
+    const resetUrl = `${process.env.FRONT_END}/reset-password?token=${resetToken}`;
+
+    await handleSendEmail({
+      senderPrefix: "noreply",
+      recipientEmail: user.email as string,
+      subject: "Password Reset Request",
+      templateName: "password-reset",
+      templateContext: {
+        name: user.name,
+        resetUrl: resetUrl,
+        year: new Date().getFullYear(),
+        baseUrl: process.env.FRONT_END!,
+        logoUrl: process.env.LOGO_URL!,
+      },
+    });
+
+    res.json({
+      message: safetyMessage,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const resetPassword = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+) => {
+  const { token, password } = req.body;
+
+  try {
+    const decoded = jwt.verify(
+      token,
+      process.env.ACCESS_TOKEN_SECRET as string,
+    ) as { id: number; email: string };
+
+    const user = await prisma.user.findUnique({
+      where: { id: decoded.id },
+    });
+
+    if (
+      !user ||
+      user.resetToken !== token ||
+      (user.resetTokenExpiry && user.resetTokenExpiry < new Date())
+    ) {
+      res.status(400).json({
+        message: "Invalid or expired reset token",
+        error: "INVALID_TOKEN",
+      });
+      return;
+    }
+
+    const passwordHash = await bcrypt.hash(password, SALT_ROUNDS);
+
+    await prisma.user.update({
+      where: { id: user.id },
+      data: {
+        passwordHash,
+        resetToken: null,
+        resetTokenExpiry: null,
+      },
+    });
+
+    res.json({ message: "Password updated successfully" });
+  } catch (error) {
+    if (
+      (error as Error).name === "JsonWebTokenError" ||
+      (error as Error).name === "TokenExpiredError"
+    ) {
+      res.status(400).json({
+        message: "Invalid or expired reset token",
+        error: "INVALID_TOKEN",
+      });
+      return;
+    }
     next(error);
   }
 };

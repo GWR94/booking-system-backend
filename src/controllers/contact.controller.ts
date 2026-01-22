@@ -1,16 +1,24 @@
 import { Request, Response, NextFunction } from "express";
 import { handleSendEmail } from "../utils/email";
+import { contactSchema } from "@middleware";
 
 export const sendContactMessage = async (
   req: Request,
   res: Response,
-  next: NextFunction
+  next: NextFunction,
 ) => {
   const { name, email, phone, subject, message } = req.body;
 
-  // Basic validation
-  if (!name || !email || !subject || !message) {
-    res.status(400).json({ message: "Missing required fields" });
+  const { error } = contactSchema.validate({
+    name,
+    email,
+    phone,
+    subject,
+    message,
+  });
+
+  if (error) {
+    res.status(400).json({ message: error.details[0].message });
     return;
   }
 

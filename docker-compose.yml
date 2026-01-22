@@ -1,0 +1,30 @@
+services:
+  postgres:
+    image: postgres:15
+    container_name: booking_system_db
+    restart: always
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: booking_system
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  postgres-test:
+    image: postgres:15
+    container_name: booking_system_db_test
+    restart: always
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: booking_system_test
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_data_test:/var/lib/postgresql/data
+
+volumes:
+  postgres_data:
+  postgres_data_test:

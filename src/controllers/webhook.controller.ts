@@ -1,55 +1,34 @@
 import { RequestWithBody } from "../../app";
 import Stripe from "stripe";
-import prisma from "../config/prisma-client";
 import { Response, Request, NextFunction } from "express";
-import { handleSendEmail } from "../utils/email";
-import { groupSlotsByBay } from "../utils/group-slots";
-import crypto from "crypto";
-import dayjs from "dayjs";
-import advanced from "dayjs/plugin/advancedFormat";
-import { User } from "../interfaces/user.i";
-import { MEMBERSHIP_TIERS } from "../config/membership.config";
-import { MembershipStatus, MembershipTier } from "@prisma/client";
+import { BookingService, MembershipService } from "@services";
+import { logger } from "@utils";
 
-dayjs.extend(advanced);
-
-export interface Booking {
-  id: number;
-  userId: number;
-  slotId: number;
-  bookingTime: Date;
-  status: StatusType;
-  paymentId?: string;
-  paymentStatus?: string;
-}
-
-type StatusType = "available" | "booked" | "unavailable" | "pending";
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY as string);
 
 export const handleWebhook = async (
   req: Request,
   res: Response,
-  next: NextFunction
+  next: NextFunction,
 ): Promise<void> => {
   let event = req.body;
   const endpointSecret = process.env.STRIPE_WEBHOOK_SECRET as string;
   const rawBody = (req as RequestWithBody).rawBody || req.body;
+
   if (endpointSecret) {
-    // Get the signature sent by Stripe
     const signature = req.headers["stripe-signature"] as string | string[];
     try {
       event = stripe.webhooks.constructEvent(
         rawBody,
         signature,
-        endpointSecret
+        endpointSecret,
       );
     } catch (err) {
-      console.log(
-        `⚠️  Webhook signature verification failed.`,
-        (err as Error).message,
-        err
+      logger.error(
+        `⚠️  Webhook signature verification failed. ${(err as Error).message}`,
       );
       res.sendStatus(400);
+      return;
     }
   }
 
@@ -59,13 +38,13 @@ export const handleWebhook = async (
         const payment = event.data.object as Stripe.PaymentIntent;
         const { bookingId } = payment.metadata;
 
-        // Handle regular booking confirmation
-        const booking = await confirmBooking(
-          payment.id,
-          payment.status,
-          bookingId
-        );
-        console.log("Regular booking confirmed:", booking);
+        if (bookingId) {
+          await BookingService.confirmBooking(
+            parseInt(bookingId, 10),
+            payment.id,
+            payment.status,
+          );
+        }
         break;
       }
       case "payment_intent.created": {
@@ -75,35 +54,23 @@ export const handleWebhook = async (
 
         let booking;
         if (isGuest === "true") {
-          // Guest booking - find or create guest user
-          const guestUser = await prisma.user.upsert({
-            where: { email: guestEmail },
-            update: {
+          booking = await BookingService.createBooking({
+            slotIds: JSON.parse(slotIds),
+            paymentId: payment.id,
+            paymentStatus: payment.status,
+            guestInfo: {
               name: guestName,
-              ...(guestPhone && { phone: guestPhone }),
-            },
-            create: {
               email: guestEmail,
-              name: guestName,
-              ...(guestPhone && { phone: guestPhone }),
-              role: "guest",
+              phone: guestPhone,
             },
           });
-
-          booking = await createBooking(
-            guestUser.id,
-            JSON.parse(slotIds),
-            payment.id,
-            payment.status
-          );
         } else {
-          // Authenticated user booking
-          booking = await createBooking(
-            parseInt(userId, 10),
-            JSON.parse(slotIds),
-            payment.id,
-            payment.status
-          );
+          booking = await BookingService.createBooking({
+            userId: parseInt(userId, 10),
+            slotIds: JSON.parse(slotIds),
+            paymentId: payment.id,
+            paymentStatus: payment.status,
+          });
         }
 
         await stripe.paymentIntents.update(payment.id, {
@@ -114,382 +81,25 @@ export const handleWebhook = async (
       case "payment_intent.payment_failed": {
         const payment = event.data.object as Stripe.PaymentIntent;
         const { bookingId } = payment.metadata;
-        console.log(`Payment failed for booking ${bookingId}`);
 
         if (bookingId) {
-          await handleFailedPayment(parseInt(bookingId));
-        } else {
-          console.error("No bookingId found in payment metadata");
+          await BookingService.handleFailedPayment(parseInt(bookingId, 10));
         }
         break;
       }
       case "customer.subscription.created":
-      case "customer.subscription.updated": {
-        const subscription = event.data.object as Stripe.Subscription;
-        await handleSubscriptionUpdate(subscription);
-        break;
-      }
+      case "customer.subscription.updated":
       case "customer.subscription.deleted": {
         const subscription = event.data.object as Stripe.Subscription;
-        await handleSubscriptionDeletion(subscription);
+        await MembershipService.handleMembershipUpdate(subscription);
         break;
       }
       default:
-        // Unexpected event type
-        console.log(`Unhandled event type ${event.type}.`);
-        console.log({ type: event.type, data: event.data });
+        logger.warn(`Unhandled event type ${event.type}.`);
         break;
     }
+    res.json({ received: true });
   } catch (error) {
     next(error);
-  }
-};
-
-export const createBooking = async (
-  userId: number,
-  slotIds: number[],
-  paymentId: string,
-  paymentStatus: string
-) => {
-  try {
-    // Verify all slots exist and are available
-    const slots = await prisma.slot.findMany({
-      where: {
-        id: {
-          in: slotIds,
-        },
-        status: "available",
-      },
-    });
-
-    if (slots.length !== slotIds.length) {
-      throw new Error("One or more slots do not exist or have been booked");
-    }
-
-    // Create booking with connected slots
-    const booking = await prisma.booking.create({
-      data: {
-        user: {
-          connect: { id: userId },
-        },
-        slots: {
-          connect: slotIds.map((id: number) => ({ id })),
-        },
-        status: "pending",
-        paymentId,
-        paymentStatus,
-      },
-      include: {
-        slots: true,
-      },
-    });
-
-    // Update all slots to booked status
-    await prisma.slot.updateMany({
-      where: {
-        id: {
-          in: slotIds,
-        },
-      },
-      data: {
-        status: "awaiting payment",
-      },
-    });
-
-    return booking;
-  } catch (error) {
-    console.error("Error creating booking:", error);
-    throw new Error("Error creating booking");
-  }
-};
-
-export const createGuestBooking = async (
-  slotIds: number[],
-  paymentId: string,
-  paymentStatus: string,
-  guestName: string,
-  guestEmail: string,
-  guestPhone?: string
-) => {
-  try {
-    // Create guest user first
-    const guestUser = await prisma.user.create({
-      data: {
-        email: guestEmail,
-        name: guestName,
-        ...(guestPhone && { phone: guestPhone }),
-        role: "guest",
-      },
-    });
-
-    // Verify all slots exist and are available
-    const slots = await prisma.slot.findMany({
-      where: {
-        id: {
-          in: slotIds,
-        },
-        status: "available",
-      },
-    });
-
-    if (slots.length !== slotIds.length) {
-      throw new Error("One or more slots do not exist or have been booked");
-    }
-
-    // Create booking with connected slots
-    const booking = await prisma.booking.create({
-      data: {
-        user: {
-          connect: { id: guestUser.id },
-        },
-        slots: {
-          connect: slotIds.map((id: number) => ({ id })),
-        },
-        status: "pending",
-        paymentId,
-        paymentStatus,
-      },
-      include: {
-        slots: true,
-      },
-    });
-
-    // Update all slots to awaiting payment status
-    await prisma.slot.updateMany({
-      where: {
-        id: {
-          in: slotIds,
-        },
-      },
-      data: {
-        status: "awaiting payment",
-      },
-    });
-
-    return booking;
-  } catch (error) {
-    console.error("Error creating guest booking:", error);
-    throw new Error("Error creating guest booking");
-  }
-};
-
-export const requestPasswordReset = async (
-  req: Request,
-  res: Response,
-  next: NextFunction
-) => {
-  const { email } = req.body;
-
-  try {
-    const user = await prisma.user.findUnique({ where: { email } });
-
-    if (!user) {
-      // For security, always send a success message even if user not found
-      res.json({
-        message:
-          "If an account with that email exists, a password reset link has been sent.",
-      });
-      return;
-    }
-
-    // Generate a reset token
-    const resetToken = crypto.randomBytes(32).toString("hex");
-    const resetTokenExpiry = new Date(Date.now() + 3600000); // 1 hour from now
-
-    await prisma.user.update({
-      where: { id: user.id },
-      data: {
-        resetToken,
-        resetTokenExpiry,
-      },
-    });
-
-    // Construct the reset URL (this should point to your frontend reset page)
-    const resetUrl = `${process.env.FRONT_END}/reset-password?token=${resetToken}`;
-
-    // Send the email
-    await handleSendEmail({
-      senderPrefix: "noreply",
-      recipientEmail: user.email as string,
-      subject: "Password Reset Request",
-      templateName: "password-reset",
-      templateContext: {
-        name: user.name,
-        resetUrl: resetUrl,
-        year: new Date().getFullYear(),
-        baseUrl: process.env.FRONT_END!,
-        logoUrl: process.env.LOGO_URL!,
-      },
-    });
-
-    res.json({
-      message:
-        "If an account with that email exists, a password reset link has been sent.",
-    });
-  } catch (error) {
-    next(error);
-  }
-};
-
-export const confirmBooking = async (
-  paymentId: string,
-  paymentStatus: string,
-  bookingId: string
-) => {
-  try {
-    console.log("Confirming booking:", { paymentId, paymentStatus, bookingId });
-    // update booking to confirm
-    const update = await prisma.booking.update({
-      where: { id: parseInt(bookingId, 10) },
-      data: {
-        status: "confirmed",
-        paymentId,
-        paymentStatus,
-      },
-    });
-
-    const booking = await prisma.booking.findUnique({
-      where: { id: update.id },
-      include: {
-        slots: {
-          include: {
-            bay: true,
-          },
-        },
-        user: true,
-      },
-    });
-
-    if (!booking) {
-      console.error("Booking not found");
-      throw new Error("Booking not found");
-    }
-
-    const intents = await stripe.paymentIntents.retrieve(paymentId);
-    const amount = intents.amount / 100;
-    const groupedSlots = groupSlotsByBay(booking.slots);
-
-    await handleSendEmail({
-      senderPrefix: "bookings",
-      recipientEmail: booking.user.email!,
-      templateName: "confirmation",
-      subject: "Booking Confirmation",
-      templateContext: {
-        booking: {
-          id: booking.id,
-          slots: groupedSlots,
-        },
-        payment: {
-          intentId: paymentId,
-          amount: amount.toFixed(2),
-        },
-        year: new Date().getFullYear(),
-        baseUrl: process.env.FRONT_END!,
-        logoUrl: process.env.LOGO_URL!,
-      },
-    });
-
-    console.log(booking);
-
-    return booking;
-  } catch (error) {
-    console.error("Error confirming booking:", error);
-    throw new Error("Error confirming booking");
-  }
-};
-
-// Handle failed payments - release slots and update booking status
-const handleFailedPayment = async (bookingId: number) => {
-  try {
-    // Update booking status to failed
-    const booking = await prisma.booking.update({
-      where: { id: bookingId },
-      data: {
-        status: "failed",
-      },
-      include: {
-        slots: true,
-      },
-    });
-
-    // Get all slot IDs associated with this booking
-    const slotIds = booking.slots.map((slot) => slot.id);
-
-    // Update all associated slots back to 'available'
-    await prisma.slot.updateMany({
-      where: {
-        id: {
-          in: slotIds,
-        },
-      },
-      data: {
-        status: "available",
-      },
-    });
-
-    // Note: No email sent for failed payments since user sees immediate error on frontend
-    console.log(`Payment failed for booking ${bookingId}. Slots released.`);
-  } catch (error) {
-    console.error("Error handling failed payment:", error);
-  }
-};
-
-const handleSubscriptionUpdate = async (subscription: Stripe.Subscription) => {
-  const customerId = subscription.customer as string;
-  const status = subscription.status;
-  const currentPeriodStart = new Date(subscription.current_period_start * 1000);
-  const currentPeriodEnd = new Date(subscription.current_period_end * 1000);
-  const priceId = subscription.items.data[0].price.id;
-
-  const tierEntry = Object.entries(MEMBERSHIP_TIERS).find(
-    ([, val]) => val.priceId === priceId
-  );
-  const tier = tierEntry ? (tierEntry[0] as MembershipTier) : null;
-
-  // Map Stripe status to our Enum
-  let mappedStatus: MembershipStatus = MembershipStatus.CANCELLED;
-  if (["active", "trialing"].includes(status)) {
-    mappedStatus = MembershipStatus.ACTIVE;
-  }
-
-  try {
-    await prisma.user.update({
-      where: { stripeCustomerId: customerId },
-      data: {
-        membershipStatus: mappedStatus,
-        currentPeriodStart,
-        currentPeriodEnd,
-        cancelAtPeriodEnd: subscription.cancel_at_period_end,
-        ...(tier && { membershipTier: tier }),
-      },
-    });
-    console.log(`Updated subscription for customer ${customerId}`);
-  } catch (error) {
-    console.error(
-      `Error updating subscription for customer ${customerId}:`,
-      error
-    );
-  }
-};
-
-const handleSubscriptionDeletion = async (
-  subscription: Stripe.Subscription
-) => {
-  const customerId = subscription.customer as string;
-
-  try {
-    await prisma.user.update({
-      where: { stripeCustomerId: customerId },
-      data: {
-        membershipStatus: MembershipStatus.CANCELLED,
-        membershipTier: null,
-      },
-    });
-    console.log(`Canceled subscription for customer ${customerId}`);
-  } catch (error) {
-    console.error(
-      `Error canceling subscription for customer ${customerId}:`,
-      error
-    );
   }
 };
