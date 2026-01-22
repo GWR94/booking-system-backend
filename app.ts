@@ -94,15 +94,28 @@ app.get("/", (req: Request, res: Response) => {
 });
 
 // Health Check
-app.get("/health", async (req: Request, res: Response) => {
-  try {
-    await prisma.$queryRaw`SELECT 1`;
-    res.status(200).json({ status: "ok", timestamp: new Date() });
-  } catch (error) {
-    console.error("Health check failed:", error);
-    res
-      .status(500)
-      .json({ status: "error", message: "Database connection failed" });
+// Health Check
+app.get("/health", async (req: Request, res: Response): Promise<void> => {
+  const maxRetries = 3;
+  let attempts = 0;
+
+  while (attempts < maxRetries) {
+    try {
+      attempts++;
+      await prisma.$queryRaw`SELECT 1`;
+      res.status(200).json({ status: "ok", timestamp: new Date() });
+      return;
+    } catch (error) {
+      console.error(`Health check attempt ${attempts} failed:`, error);
+      if (attempts >= maxRetries) {
+        res
+          .status(500)
+          .json({ status: "error", message: "Database connection failed" });
+        return;
+      }
+      // Wait briefly before retrying
+      await new Promise((resolve) => setTimeout(resolve, 500));
+    }
   }
 });
 
