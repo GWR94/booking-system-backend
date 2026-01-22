@@ -28,7 +28,13 @@ const prismaClientSingleton = () => {
       log: ["query", "info", "warn", "error"],
     }).$extends(withAccelerate());
   } else {
-    pool = new Pool({ connectionString });
+    pool = new Pool({
+      connectionString,
+      ssl: connectionString.includes("localhost")
+        ? false
+        : { rejectUnauthorized: false },
+      max: 20,
+    });
     const adapter = new PrismaPg(pool);
     return new PrismaClient({
       adapter,
