@@ -1,6 +1,6 @@
-const { definePrismaConfig } = require("@prisma/config");
+const { defineConfig } = require("@prisma/config");
 
-module.exports = definePrismaConfig({
+module.exports = defineConfig({
   datasources: {
     db: {
       url: process.env.DATABASE_URL,
