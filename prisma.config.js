@@ -1,11 +1,11 @@
 const { defineConfig } = require("@prisma/config");
+require("dotenv").config();
 
 module.exports = defineConfig({
-  datasources: {
-    db: {
-      url: process.env.DATABASE_URL,
-      // directUrl is used for migrations (e.g. npx prisma migrate deploy)
-      directUrl: process.env.DIRECT_URL,
-    },
+  datasource: {
+    // For CLI commands (migrate, studio, etc.), we need the direct connection.
+    // If DIRECT_URL is set (Production/Accelerate), use it.
+    // Otherwise fallback to DATABASE_URL (Local Dev).
+    url: process.env.DIRECT_URL || process.env.DATABASE_URL,
   },
 });
