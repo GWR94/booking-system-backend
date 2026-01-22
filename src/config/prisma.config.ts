@@ -14,7 +14,7 @@ if (!connectionString) {
 }
 
 const prismaClientSingleton = () => {
-  return new PrismaClient();
+  return new PrismaClient({});
 };
 
 declare global {
