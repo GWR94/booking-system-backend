@@ -1,6 +1,6 @@
 node_modules
 /dist
-.github
+.github/*.md
 
 .env
 .env.test
@@ -12,7 +12,7 @@ test-results/
 coverage
 
 # Logs
-logs
+/logs
 *.log
 npm-debug.log*
 yarn-debug.log*
