@@ -1,13 +1,11 @@
 import cron from "node-cron";
-import prisma from "../config/prisma.config";
+import prisma from "@config/prisma.config";
 import { logger } from "@utils";
 
 // Schedule the job to run every minute
 const JOB_TIMEOUT = 50000; // 50 seconds safety timeout
 let isJobRunning = false;
 
-// Schedule the job to run every minute
-// Schedule the job to run every minute
 export const startBookingCleanupJob = () => {
   cron.schedule("* * * * *", async () => {
     if (isJobRunning) {
@@ -82,8 +80,13 @@ export const startBookingCleanupJob = () => {
           });
         }
       }
-    } catch (error) {
-      logger.error(`Error cleaning up stale bookings: ${error}`);
+    } catch (error: any) {
+      // If Prisma's error code indicates a connection issue (P1xxx series)
+      if (error.code?.startsWith("P1")) {
+        logger.error("Database connection lost. Cleanup job skipped.");
+      } else {
+        logger.error(`Error cleaning up stale bookings: ${error.message}`);
+      }
     } finally {
       clearTimeout(timeoutId);
       isJobRunning = false;

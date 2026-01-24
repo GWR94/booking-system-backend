@@ -1,6 +1,7 @@
 import nodemailer from "nodemailer";
 import hbs from "nodemailer-express-handlebars";
 import { logger } from "./logger";
+import { COMPANY_CONFIG } from "../config/company.config";
 
 type EmailTemplateName = "confirmation" | "password-reset" | "contact-form";
 
@@ -91,7 +92,7 @@ export const handleSendEmail = async <T extends EmailTemplateName>({
   replyTo,
 }: SendConfirmProps<T>) => {
   try {
-    const fromAddress = `${senderPrefix}@jamesgower.dev`;
+    const fromAddress = `${senderPrefix}@${COMPANY_CONFIG.emailDomain}`;
 
     const mailOptions = {
       from: fromAddress,
