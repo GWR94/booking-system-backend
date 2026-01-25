@@ -16,7 +16,8 @@ jobs:
           # For example: curl -f https://your-backend-url.onrender.com/health
           # We can use a GitHub Secret called BACKEND_URL
           if [ -n "${{ secrets.BACKEND_URL }}" ]; then
-            curl -f "${{ secrets.BACKEND_URL }}/health"
+            # Retry up to 5 times, wait 10 seconds between retries, max time 180s to allow for cold starts
+            curl -f --retry 5 --retry-delay 10 --retry-connrefused --max-time 180 "${{ secrets.BACKEND_URL }}/health"
           else
             echo "BACKEND_URL secret is not set. Please add it to your repo secrets."
             exit 1
