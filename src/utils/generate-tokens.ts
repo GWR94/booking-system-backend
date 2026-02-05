@@ -18,7 +18,7 @@ const generateTokens = (user: UserPayload) => {
   const refreshToken = sign(
     { id: user.id },
     process.env.REFRESH_TOKEN_SECRET as string,
-    { expiresIn: "7d" } // Longer lifetime
+    { expiresIn: "7d" }, // Longer lifetime
   );
 
   return { accessToken, refreshToken };

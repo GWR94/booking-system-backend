@@ -88,7 +88,7 @@ jest.mock("@config/prisma.config", () => ({
       upsert: jest.fn(),
     },
     $disconnect: jest.fn(),
-    $transaction: jest.fn((cb) =>
+    $transaction: jest.fn((cb: any) =>
       cb({
         user: { findUnique: jest.fn(), create: jest.fn(), update: jest.fn() },
         booking: { create: jest.fn(), update: jest.fn() },

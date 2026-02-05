@@ -37,8 +37,11 @@ const prismaClientSingleton = () => {
         url.searchParams.delete("sslmode");
         poolConnectionString = url.toString();
       }
-    } catch {
-      // If URL parsing fails, use original string
+    } catch (error) {
+      console.warn(
+        "Failed to parse DATABASE_URL, using original string:",
+        error,
+      );
     }
 
     pool = new Pool({

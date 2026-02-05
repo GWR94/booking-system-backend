@@ -18,6 +18,5 @@ module.exports = {
     "^@interfaces/(.*)$": "<rootDir>/src/interfaces/$1",
     "^@services$": "<rootDir>/src/services/index",
     "^@services/(.*)$": "<rootDir>/src/services/$1",
-    "^prisma/(.*)$": "<rootDir>/prisma/$1",
   },
 };
