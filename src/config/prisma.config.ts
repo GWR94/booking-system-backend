@@ -24,7 +24,11 @@ const prismaClientSingleton = () => {
 
   if (isAccelerate) {
     return new PrismaClient({
-      accelerateUrl: connectionString,
+      datasources: {
+        db: {
+          url: connectionString,
+        },
+      },
       log: ["warn", "error"],
     }).$extends(withAccelerate());
   } else {
