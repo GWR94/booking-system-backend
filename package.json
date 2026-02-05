@@ -5,7 +5,7 @@
   "main": "server.ts",
   "scripts": {
     "start": "node dist/server.js",
-    "build": "tsc && tsc-alias",
+    "build": "npx prisma generate && tsc && tsc-alias",
     "dev": "nodemon -r tsconfig-paths/register server.ts",
     "seed": "ts-node scripts/seed.ts",
     "populate": "ts-node scripts/populate-slots.ts",

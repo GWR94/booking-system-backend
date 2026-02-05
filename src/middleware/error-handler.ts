@@ -9,7 +9,10 @@ const errorHandler = async (
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   next: NextFunction,
 ) => {
-  const statusCode = err instanceof AppError ? err.statusCode : 500;
+  const statusCode =
+    err instanceof AppError
+      ? err.statusCode
+      : err.status || err.statusCode || 500;
   const errorCode =
     err instanceof AppError ? err.errorCode : "INTERNAL_SERVER_ERROR";
   const message = err.message || "Internal Server Error";

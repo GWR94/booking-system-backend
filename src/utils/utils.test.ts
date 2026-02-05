@@ -35,13 +35,14 @@ describe("Utilities", () => {
       expect(total).toBe(13500);
     });
 
-    it("should handle multiple slots in one item", () => {
-      // 1 item with 2 slots.
+    it("should handle multiple slots", () => {
+      // 2 slots
       // 2 * 4500 = 9000
-      const basket = [
-        { slotIds: [1, 2], startTime: new Date("2024-06-01T18:00:00") },
+      const slots = [
+        { id: 1, startTime: new Date("2024-06-01T18:00:00") },
+        { id: 2, startTime: new Date("2024-06-01T18:00:00") },
       ] as any;
-      expect(calculateBasketCost(basket)).toBe(9000);
+      expect(calculateBasketCost(slots)).toBe(9000);
     });
 
     it("should return 0 for empty basket", () => {
