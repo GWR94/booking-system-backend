@@ -23,16 +23,8 @@ export const createBooking = async (
   const { currentUser } = req;
 
   try {
-    if (!currentUser) {
-      res.status(401).json({
-        message: "Unauthorized",
-        error: "NOT_AUTHENTICATED",
-      });
-      return;
-    }
-
     const booking = await BookingService.createBooking({
-      userId: currentUser.id,
+      userId: currentUser!.id,
       slotIds,
       paymentId,
       paymentStatus,
@@ -43,16 +35,6 @@ export const createBooking = async (
       booking,
     });
   } catch (error) {
-    if (
-      (error as Error).message ===
-      "One or more slots do not exist or have been booked"
-    ) {
-      res.status(400).json({
-        message: (error as Error).message,
-        error: "SLOT_NOT_AVAILABLE",
-      });
-      return;
-    }
     next(error);
   }
 };
@@ -65,24 +47,35 @@ export const createPaymentIntent = async (
   const { items } = req.body;
   const { currentUser } = req;
   const slotIds = items.map((item: BasketItem) => item.slotIds).flat();
-  const slots = JSON.stringify(slotIds);
+  const ids = JSON.stringify(slotIds);
 
   if (!items || items.length === 0) {
     res.status(400).send({ error: "Invalid item selection" });
     return;
   }
 
-  if (!currentUser) {
-    res.status(401).json({ message: "Unauthorized" });
-    return;
-  }
-
   try {
-    let finalAmount = calculateBasketCost(items);
-    const totalHoursRequested = slotIds.length;
+    // Fetch authoritative slot data from the database
+    const dbSlots = await prisma.slot.findMany({
+      where: {
+        id: { in: slotIds },
+      },
+    });
+
+    if (dbSlots.length !== slotIds.length) {
+      const foundIds = dbSlots.map((s) => s.id);
+      const missingIds = slotIds.filter((id: number) => !foundIds.includes(id));
+      res.status(400).json({
+        error: "One or more slots are unavailable",
+        missingSlotIds: missingIds,
+      });
+      return;
+    }
+
+    let finalAmount = 0;
 
     const user = await prisma.user.findUnique({
-      where: { id: currentUser.id },
+      where: { id: currentUser!.id },
       include: {
         bookings: {
           include: { slots: true },
@@ -102,7 +95,6 @@ export const createPaymentIntent = async (
         user.bookings.forEach((booking) => {
           // Only count confirmed bookings in the current period
           if (booking.status === "confirmed" || booking.status === "pending") {
-            // Check date overlap - primitive check
             const bookingDate = new Date(booking.bookingTime);
             if (bookingDate >= periodStart && bookingDate <= periodEnd) {
               usedHours += booking.slots.length;
@@ -110,35 +102,17 @@ export const createPaymentIntent = async (
           }
         });
 
-        const includedHours = tierConfig.includedHours;
-        let remainingIncluded = Math.max(0, includedHours - usedHours);
-
-        let totalDiscountedCost = 0;
-        for (const item of items) {
-          const start = dayjs(item.startTime);
-          const durationHours = item.slotIds.length;
-
-          for (let i = 0; i < durationHours; i++) {
-            const slotTime = start.add(i, "hour");
-            const dayOfWeek = slotTime.day(); // 0 = Sunday, 6 = Saturday
-            const hour = slotTime.hour();
-            const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
-            const isPeak = isWeekend || hour >= 17;
-            const baseRate = isPeak ? PEAK_RATE : OFF_PEAK_RATE;
-
-            const isEligibleForFree = tierConfig.weekendAccess || !isWeekend;
-
-            if (isEligibleForFree && remainingIncluded > 0) {
-              remainingIncluded--;
-              // Free hour, cost stays 0
-            } else {
-              totalDiscountedCost += baseRate * (1 - tierConfig.discount);
-            }
-          }
-        }
-
-        finalAmount = Math.round(totalDiscountedCost);
+        const remainingIncluded = Math.max(
+          0,
+          tierConfig.includedHours - usedHours,
+        );
+        finalAmount = calculateBasketCost(dbSlots, {
+          tierConfig,
+          remainingIncludedHours: remainingIncluded,
+        });
       }
+    } else {
+      finalAmount = calculateBasketCost(dbSlots);
     }
 
     if (finalAmount === 0) {
@@ -151,8 +125,8 @@ export const createPaymentIntent = async (
       amount: finalAmount,
       currency: "gbp",
       metadata: {
-        userId: currentUser.id.toString(),
-        slotIds: slots,
+        userId: currentUser!.id.toString(),
+        slotIds: ids,
       },
     });
 
@@ -163,30 +137,45 @@ export const createPaymentIntent = async (
 };
 
 export const cancelBooking = async (
-  req: Request,
+  req: AuthenticatedRequest,
   res: Response,
   next: NextFunction,
 ) => {
-  const { bookingId } = req.params;
-
   try {
-    const booking = await prisma.booking.findUnique({
-      where: { id: parseInt(bookingId, 10) },
-      include: { slots: true },
-    });
+    const booking = req.booking!;
 
-    if (!booking) {
-      res
-        .status(404)
-        .json({ message: "Booking not found", error: "BOOKING_NOT_FOUND" });
-      return;
+    // Verify cancellation policy (24 hours notice)
+    const firstSlot = booking.slots[0];
+    let refundWarning: string | undefined;
+    let refundStatus:
+      | "refunded"
+      | "not_refunded_policy"
+      | "not_applicable"
+      | "failed" = "not_applicable";
+
+    if (firstSlot && booking.paymentId) {
+      const slotTime = new Date(firstSlot.startTime).getTime();
+      const now = Date.now();
+      const hoursUntilBooking = (slotTime - now) / (1000 * 60 * 60);
+
+      if (hoursUntilBooking >= 24) {
+        try {
+          await stripe.refunds.create({
+            payment_intent: booking.paymentId,
+          });
+          refundStatus = "refunded";
+        } catch (error) {
+          console.error("Stripe refund failed:", error);
+          refundWarning =
+            "Booking cancelled, but automatic refund failed. Please contact support.";
+          refundStatus = "failed";
+        }
+      } else {
+        refundStatus = "not_refunded_policy";
+      }
     }
 
-    // TODO
-    // [ ] Add date / time check for company policy - eg no closer than 2 weeks
-    // [ ] Add stripe refund ??
-
-    const slotIds = booking.slots.map((slot) => slot.id);
+    const slotIds = booking.slots.map((slot: any) => slot.id);
 
     if (slotIds.length === 0) {
       res.status(400).json({
@@ -207,11 +196,16 @@ export const cancelBooking = async (
       },
     });
 
-    await prisma.booking.delete({
+    await prisma.booking.update({
       where: { id: booking.id },
+      data: { status: "cancelled" },
     });
 
-    res.json({ message: "Booking cancelled successfully" });
+    res.json({
+      message: "Booking cancelled successfully",
+      refundWarning,
+      refundStatus,
+    });
   } catch (error) {
     next(error);
   }
@@ -224,7 +218,7 @@ export const createGuestPaymentIntent = async (
 ) => {
   const { items, guestInfo, recaptchaToken } = req.body;
   const slotIds = items.map((item: BasketItem) => item.slotIds).flat();
-  const slots = JSON.stringify(slotIds);
+  const ids = JSON.stringify(slotIds);
 
   if (!items || items.length === 0) {
     res.status(400).send({ error: "Invalid item selection" });
@@ -249,11 +243,28 @@ export const createGuestPaymentIntent = async (
       return;
     }
 
+    // Fetch authoritative slot data from the database
+    const dbSlots = await prisma.slot.findMany({
+      where: {
+        id: { in: slotIds },
+      },
+    });
+
+    if (dbSlots.length !== slotIds.length) {
+      const foundIds = dbSlots.map((s) => s.id);
+      const missingIds = slotIds.filter((id: number) => !foundIds.includes(id));
+      res.status(400).json({
+        error: "One or more slots not found",
+        missingSlotIds: missingIds,
+      });
+      return;
+    }
+
     const intent = await stripe.paymentIntents.create({
-      amount: calculateBasketCost(items),
+      amount: calculateBasketCost(dbSlots),
       currency: "gbp",
       metadata: {
-        slotIds: slots,
+        slotIds: ids,
         isGuest: "true",
         guestName: guestInfo.name,
         guestEmail: guestInfo.email,
@@ -288,16 +299,6 @@ export const createGuestBooking = async (
       guestEmail: guestInfo.email,
     });
   } catch (error) {
-    if (
-      (error as Error).message ===
-      "One or more slots do not exist or have been booked"
-    ) {
-      res.status(400).json({
-        message: (error as Error).message,
-        error: "SLOT_NOT_AVAILABLE",
-      });
-      return;
-    }
     next(error);
   }
 };

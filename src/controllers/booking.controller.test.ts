@@ -19,11 +19,13 @@ import {
 import { prisma } from "@config";
 import { AuthenticatedRequest } from "@interfaces";
 
-jest.mock("@utils", () => ({
-  groupSlotsByBay: jest.fn(),
-  calculateBasketCost: jest.fn(),
-  __esModule: true,
-}));
+jest.mock("@utils", () => {
+  const original = jest.requireActual("@utils") as any;
+  return {
+    ...original,
+    groupSlotsByBay: jest.fn(),
+  };
+});
 
 jest.mock("@services", () => ({
   BookingService: {
@@ -42,8 +44,12 @@ jest.mock("stripe", () => {
   const mockPaymentIntents = {
     create: jest.fn(),
   };
+  const mockRefunds = {
+    create: jest.fn(),
+  };
   const mockInstance = {
     paymentIntents: mockPaymentIntents,
+    refunds: mockRefunds,
   };
   const mockConstructor = jest.fn(() => mockInstance);
   (mockConstructor as any).__mockInstance = mockInstance;
@@ -118,6 +124,7 @@ describe("BookingController Integration", () => {
         email: "test@test.com",
         membershipTier: "PAR",
         membershipStatus: "ACTIVE",
+        role: "user",
       },
       body: {},
     } as Partial<AuthenticatedRequest>;
@@ -176,7 +183,7 @@ describe("BookingController Integration", () => {
 
       await createBooking(req as AuthenticatedRequest, res as Response, next);
 
-      expect(res.status).toHaveBeenCalledWith(400);
+      expect(next).toHaveBeenCalledWith(expect.any(Error));
     });
 
     it("should handle creation failure gracefully", async () => {
@@ -195,11 +202,20 @@ describe("BookingController Integration", () => {
   describe("#cancelBooking", () => {
     it("should cancel booking and free up slots", async () => {
       req.params = { bookingId: "1" };
-      const mockBooking = { id: 1, slots: [{ id: 101 }, { id: 102 }] };
+      const mockBooking = {
+        id: 1,
+        userId: 1,
+        slots: [{ id: 101 }, { id: 102 }],
+      };
 
       (prisma.booking.findUnique as any).mockResolvedValue(mockBooking);
       (prisma.slot.updateMany as any).mockResolvedValue({ count: 2 });
-      (prisma.booking.delete as any).mockResolvedValue(mockBooking);
+      (prisma.booking.update as any).mockResolvedValue({
+        ...mockBooking,
+        status: "cancelled",
+      });
+
+      req.booking = mockBooking;
 
       await cancelBooking(req as any, res as Response, next);
 
@@ -207,19 +223,124 @@ describe("BookingController Integration", () => {
         where: { id: { in: [101, 102] } },
         data: { status: "available" },
       });
-      expect(prisma.booking.delete).toHaveBeenCalledWith({ where: { id: 1 } });
+      expect(prisma.booking.update).toHaveBeenCalledWith({
+        where: { id: 1 },
+        data: { status: "cancelled" },
+      });
+      // Ensure we DO NOT delete
+      expect(prisma.booking.delete).not.toHaveBeenCalled();
       expect(res.json).toHaveBeenCalledWith({
         message: "Booking cancelled successfully",
+        refundWarning: undefined,
+        refundStatus: "not_applicable",
       });
     });
 
-    it("should return 404 if booking not found", async () => {
-      req.params = { bookingId: "99" };
-      (prisma.booking.findUnique as any).mockResolvedValue(null);
+    it("should issue a refund if cancelled > 24 hours in advance", async () => {
+      req.params = { bookingId: "1" };
+      // Slot time = Now + 25 hours
+      const futureTime = new Date(Date.now() + 25 * 60 * 60 * 1000);
+      const mockBooking = {
+        id: 1,
+        userId: 1,
+        paymentId: "pi_123",
+        slots: [{ id: 101, startTime: futureTime }],
+      };
+
+      (prisma.booking.findUnique as any).mockResolvedValue(mockBooking);
+      (prisma.slot.updateMany as any).mockResolvedValue({ count: 1 });
+      (prisma.booking.update as any).mockResolvedValue({
+        ...mockBooking,
+        status: "cancelled",
+      });
+
+      req.booking = mockBooking;
 
       await cancelBooking(req as any, res as Response, next);
 
-      expect(res.status).toHaveBeenCalledWith(404);
+      const stripeInstance = (Stripe as any).__mockInstance;
+      expect(stripeInstance.refunds.create).toHaveBeenCalledWith({
+        payment_intent: "pi_123",
+      });
+      expect(res.json).toHaveBeenCalledWith({
+        message: "Booking cancelled successfully",
+        refundWarning: undefined,
+        refundStatus: "refunded",
+      });
+    });
+
+    it("should NOT issue a refund if cancelled < 24 hours in advance", async () => {
+      req.params = { bookingId: "1" };
+      // Slot time = Now + 23 hours
+      const nearFutureTime = new Date(Date.now() + 23 * 60 * 60 * 1000);
+      const mockBooking = {
+        id: 1,
+        userId: 1,
+        paymentId: "pi_123",
+        slots: [{ id: 101, startTime: nearFutureTime }],
+      };
+
+      (prisma.booking.findUnique as any).mockResolvedValue(mockBooking);
+      (prisma.slot.updateMany as any).mockResolvedValue({ count: 1 });
+      (prisma.booking.update as any).mockResolvedValue({
+        ...mockBooking,
+        status: "cancelled",
+      });
+
+      req.booking = mockBooking;
+
+      await cancelBooking(req as any, res as Response, next);
+
+      const stripeInstance = (Stripe as any).__mockInstance;
+      expect(stripeInstance.refunds.create).not.toHaveBeenCalled();
+      expect(res.json).toHaveBeenCalledWith({
+        message: "Booking cancelled successfully",
+        refundWarning: undefined,
+        refundStatus: "not_refunded_policy",
+      });
+    });
+
+    it("should return valid response with refundWarning if refund fails", async () => {
+      req.params = { bookingId: "1" };
+      const futureTime = new Date(Date.now() + 25 * 60 * 60 * 1000);
+      const mockBooking = {
+        id: 1,
+        userId: 1,
+        paymentId: "pi_fail",
+        slots: [{ id: 101, startTime: futureTime }],
+      };
+
+      (prisma.booking.findUnique as any).mockResolvedValue(mockBooking);
+      (prisma.slot.updateMany as any).mockResolvedValue({ count: 1 });
+      (prisma.booking.update as any).mockResolvedValue({
+        ...mockBooking,
+        status: "cancelled",
+      });
+
+      req.booking = mockBooking;
+
+      const stripeInstance = (Stripe as any).__mockInstance;
+      (stripeInstance.refunds.create as any).mockRejectedValue(
+        new Error("Refund failed"),
+      );
+
+      await cancelBooking(req as any, res as Response, next);
+
+      expect(stripeInstance.refunds.create).toHaveBeenCalled();
+      expect(res.json).toHaveBeenCalledWith({
+        message: "Booking cancelled successfully",
+        refundWarning:
+          "Booking cancelled, but automatic refund failed. Please contact support.",
+        refundStatus: "failed",
+      });
+    });
+
+    it("should call next with error if booking context is missing (middleware fail)", async () => {
+      req.booking = undefined;
+
+      await cancelBooking(req as any, res as Response, next);
+
+      expect(next).toHaveBeenCalledWith(expect.any(Error));
     });
   });
 
@@ -256,14 +377,17 @@ describe("BookingController Integration", () => {
   });
 
   describe("#createPaymentIntent", () => {
-    it("should create payment intent successfully", async () => {
+    it("should create payment intent successfully using DB slots", async () => {
       req.body = {
         items: [{ slotIds: [301, 302], startTime: "2025-05-20T10:00:00Z" }],
       };
-      const mockCost = 1000;
 
-      const calcMock = require("@utils").calculateBasketCost;
-      calcMock.mockReturnValue(mockCost);
+      // Mock DB slots (Off-Peak: Tuesday 10am and 11am)
+      const mockSlots = [
+        { id: 301, startTime: new Date("2025-05-20T10:00:00Z") },
+        { id: 302, startTime: new Date("2025-05-20T11:00:00Z") },
+      ];
+      (prisma.slot.findMany as any).mockResolvedValue(mockSlots);
 
       const stripeInstance = (Stripe as any).__mockInstance;
       (stripeInstance.paymentIntents.create as any).mockResolvedValue({
@@ -278,16 +402,17 @@ describe("BookingController Integration", () => {
 
       await createPaymentIntent(req as any, res as Response, next);
 
+      // Off-peak rate (3500) * 2 = 7000
       expect(stripeInstance.paymentIntents.create).toHaveBeenCalledWith(
         expect.objectContaining({
-          amount: 1000,
+          amount: 7000,
           currency: "gbp",
           metadata: expect.objectContaining({ userId: "1" }),
         }),
       );
       expect(res.json).toHaveBeenCalledWith({
         clientSecret: "pi_secret_123",
-        amount: 1000,
+        amount: 7000,
       });
     });
 
@@ -296,8 +421,10 @@ describe("BookingController Integration", () => {
         items: [{ slotIds: [301], startTime: "2025-05-20T10:00:00Z" }],
       };
 
-      const calcMock = require("@utils").calculateBasketCost;
-      calcMock.mockReturnValue(2000);
+      const mockSlots = [
+        { id: 301, startTime: new Date("2025-05-20T10:00:00Z") },
+      ];
+      (prisma.slot.findMany as any).mockResolvedValue(mockSlots);
 
       (prisma.user.findUnique as any).mockResolvedValue({
         id: 1,
@@ -309,9 +436,6 @@ describe("BookingController Integration", () => {
       });
 
       const stripeInstance = (Stripe as any).__mockInstance;
-      (stripeInstance.paymentIntents.create as any).mockResolvedValue({
-        client_secret: "pi_secret_free",
-      });
 
       await createPaymentIntent(req as any, res as Response, next);
 
@@ -324,8 +448,10 @@ describe("BookingController Integration", () => {
         items: [{ slotIds: [301], startTime: "2025-05-20T10:00:00Z" }],
       };
 
-      const calcMock = require("@utils").calculateBasketCost;
-      calcMock.mockReturnValue(2000);
+      const mockSlots = [
+        { id: 301, startTime: new Date("2025-05-20T10:00:00Z") },
+      ];
+      (prisma.slot.findMany as any).mockResolvedValue(mockSlots);
 
       (prisma.user.findUnique as any).mockResolvedValue({
         id: 1,
@@ -336,15 +462,39 @@ describe("BookingController Integration", () => {
         bookings: [], // No used hours
       });
 
-      const stripeInstance = (Stripe as any).__mockInstance;
-      (stripeInstance.paymentIntents.create as any).mockResolvedValue({
-        client_secret: "pi_secret_par",
-      });
-
       await createPaymentIntent(req as any, res as Response, next);
 
       // Par has 5 included hours. 1 slot requested -> should be free (amount 0)
       expect(res.json).toHaveBeenCalledWith({ clientSecret: null, amount: 0 });
+    });
+
+    it("should use DB slot time for price calculation (Security Check)", async () => {
+      // Client sends Off-Peak time (Monday 10am)
+      req.body = {
+        items: [{ slotIds: [501], startTime: "2025-05-19T10:00:00Z" }],
+      };
+
+      // DB returns Peak time (Saturday 19:00)
+      const mockSlots = [
+        { id: 501, startTime: new Date("2025-05-24T19:00:00Z") },
+      ];
+      (prisma.slot.findMany as any).mockResolvedValue(mockSlots);
+
+      (prisma.user.findUnique as any).mockResolvedValue({ id: 1 });
+
+      const stripeInstance = (Stripe as any).__mockInstance;
+      (stripeInstance.paymentIntents.create as any).mockResolvedValue({
+        client_secret: "pi_secret_peak",
+      });
+
+      await createPaymentIntent(req as any, res as Response, next);
+
+      // Expect amount to be PEAK_RATE (4500) not OFF_PEAK (3500)
+      expect(stripeInstance.paymentIntents.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          amount: 4500,
+        }),
+      );
     });
 
     it("should calculate membership discounts correctly (Peak/Off-Peak)", async () => {
@@ -352,6 +502,11 @@ describe("BookingController Integration", () => {
       req.body = {
         items: [{ slotIds: [301], startTime: "2025-05-19T10:00:00Z" }],
       };
+
+      const mockSlots = [
+        { id: 301, startTime: new Date("2025-05-19T10:00:00Z") },
+      ];
+      (prisma.slot.findMany as any).mockResolvedValue(mockSlots);
 
       (prisma.user.findUnique as any).mockResolvedValue({
         id: 1,
@@ -382,6 +537,41 @@ describe("BookingController Integration", () => {
           amount: 2975,
         }),
       );
+    });
+
+    it("should restore included hours when booking is cancelled", async () => {
+      // Monday 10 AM (Off-Peak)
+      req.body = {
+        items: [{ slotIds: [301], startTime: "2025-05-19T10:00:00Z" }],
+      };
+
+      const mockSlots = [
+        { id: 301, startTime: new Date("2025-05-19T10:00:00Z") },
+      ];
+      (prisma.slot.findMany as any).mockResolvedValue(mockSlots);
+
+      (prisma.user.findUnique as any).mockResolvedValue({
+        id: 1,
+        membershipTier: "PAR", // 5 hours included
+        membershipStatus: "ACTIVE",
+        currentPeriodStart: new Date("2025-05-01"),
+        currentPeriodEnd: new Date("2025-06-01"),
+        bookings: [
+          {
+            status: "cancelled", // This booking should be IGNORED
+            bookingTime: new Date("2025-05-02"),
+            slots: new Array(5).fill({}), // 5 hours cancelled
+          },
+        ],
+      });
+
+      const stripeInstance = (Stripe as any).__mockInstance;
+
+      await createPaymentIntent(req as any, res as Response, next);
+
+      // usage should be 0 (because status is cancelled).
+      // PAR has 5 hours. Requesting 1. 5 > 0, so it should be FREE.
+      expect(res.json).toHaveBeenCalledWith({ clientSecret: null, amount: 0 });
     });
   });
 
@@ -416,6 +606,24 @@ describe("BookingController Integration", () => {
         }),
       );
     });
+
+    it("should fail if slot is missing or already booked", async () => {
+      req.body = {
+        slotIds: [999],
+        paymentId: "pi_fail",
+        paymentStatus: "failed",
+        guestInfo: { name: "Guest", email: "guest@example.com" },
+      };
+
+      const { BookingService } = require("@services");
+      (BookingService.createBooking as any).mockRejectedValue(
+        new Error("One or more slots do not exist or have been booked"),
+      );
+
+      await createGuestBooking(req as any, res as Response, next);
+
+      expect(next).toHaveBeenCalledWith(expect.any(Error));
+    });
   });
 
   describe("#createGuestPaymentIntent", () => {
@@ -429,8 +637,10 @@ describe("BookingController Integration", () => {
       const axios = require("axios");
       (axios.post as any).mockResolvedValue({ data: { success: true } });
 
-      const calcMock = require("@utils").calculateBasketCost;
-      calcMock.mockReturnValue(500);
+      const mockSlots = [
+        { id: 401, startTime: new Date("2025-05-20T10:00:00Z") },
+      ];
+      (prisma.slot.findMany as any).mockResolvedValue(mockSlots);
 
       const stripeInstance = (Stripe as any).__mockInstance;
       (stripeInstance.paymentIntents.create as any).mockResolvedValue({
@@ -442,6 +652,8 @@ describe("BookingController Integration", () => {
       expect(stripeInstance.paymentIntents.create).toHaveBeenCalledWith(
         expect.objectContaining({
           metadata: expect.objectContaining({ isGuest: "true" }),
+          // Off-peak = 3500
+          amount: 3500,
         }),
       );
       expect(res.json).toHaveBeenCalledWith({ clientSecret: "pi_guest" });

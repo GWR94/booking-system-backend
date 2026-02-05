@@ -27,9 +27,9 @@ describe("Utilities", () => {
       // 3 items, each with 1 slot. Total 3 slots.
       // 3 * 4500 = 13500
       const basket = [
-        { slotIds: [1] },
-        { slotIds: [2] },
-        { slotIds: [3] },
+        { slotIds: [1], startTime: new Date("2024-06-01T18:00:00") },
+        { slotIds: [2], startTime: new Date("2024-06-01T18:00:00") },
+        { slotIds: [3], startTime: new Date("2024-06-01T18:00:00") },
       ] as any;
       const total = calculateBasketCost(basket);
       expect(total).toBe(13500);
@@ -38,7 +38,9 @@ describe("Utilities", () => {
     it("should handle multiple slots in one item", () => {
       // 1 item with 2 slots.
       // 2 * 4500 = 9000
-      const basket = [{ slotIds: [1, 2] }] as any;
+      const basket = [
+        { slotIds: [1, 2], startTime: new Date("2024-06-01T18:00:00") },
+      ] as any;
       expect(calculateBasketCost(basket)).toBe(9000);
     });
 

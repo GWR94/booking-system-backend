@@ -3,7 +3,7 @@ import { Profile as GoogleProfile } from "passport-google-oauth20";
 import { Profile as TwitterProfile } from "passport-twitter";
 import { User, UserPayload, AuthenticatedRequest } from "@interfaces";
 import prisma from "../config/prisma.config";
-import { logger } from "./logger";
+import { logger, AuthError } from "@utils";
 
 export const findOrCreateUser = async (
   req: AuthenticatedRequest,
@@ -25,8 +25,10 @@ export const findOrCreateUser = async (
       if (existingLink.id === currentUserId) {
         return existingLink;
       } else {
-        throw new Error(
+        throw new AuthError(
           "This social account is already linked to another user.",
+          409,
+          "SOCIAL_ACCOUNT_LINKED",
         );
       }
     }
@@ -74,6 +76,10 @@ export const findOrCreateUser = async (
     });
   } catch (err) {
     logger.error(`Error in findOrCreateUser: ${err}`);
-    throw new Error(`Unable to find or create user: ${err}`);
+    throw new AuthError(
+      `Unable to find or create user: ${err}`,
+      500,
+      "USER_PROVISIONING_FAILED",
+    );
   }
 };

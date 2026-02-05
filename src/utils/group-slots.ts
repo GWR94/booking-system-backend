@@ -39,10 +39,10 @@ export const groupSlotsByBay = (slots: SlotWithBay[]): GroupedSlotResult[] => {
     SlotWithBay & { bay: { id: number; name: string } }
   >;
 
-  // Sort slots by bay name, then by start time
+  // Sort slots by bay ID, then by start time
   const sortedSlots = [...validSlots].sort((a, b) => {
-    if (a.bay.name !== b.bay.name) {
-      return a.bay.name.localeCompare(b.bay.name);
+    if (a.bay.id !== b.bay.id) {
+      return a.bay.id - b.bay.id;
     }
     return dayjs(a.startTime).diff(dayjs(b.startTime));
   });

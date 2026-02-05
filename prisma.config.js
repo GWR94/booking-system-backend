@@ -1,8 +1,8 @@
-const { defineConfig } = require("@prisma/config");
+// Load environment variables manually
 require("dotenv").config();
 
-module.exports = defineConfig({
+module.exports = {
   datasource: {
-    url: process.env.DIRECT_DATABASE_URL || process.env.DATABASE_URL,
+    url: process.env.DIRECT_URL || process.env.DATABASE_URL,
   },
-});
+};

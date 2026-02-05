@@ -1,4 +1,4 @@
-import { PrismaClient } from "../prisma/generated/prisma/client";
+import { PrismaClient } from "../prisma/generated/client";
 
 const timeSlots = [
   { start: "10:00", end: "10:55" },

@@ -1,4 +1,4 @@
-import { PrismaClient } from "../../prisma/generated/prisma/client";
+import { PrismaClient } from "../../prisma/generated/client";
 import { withAccelerate } from "@prisma/extension-accelerate";
 import { Pool } from "pg";
 import { PrismaPg } from "@prisma/adapter-pg";
@@ -28,8 +28,21 @@ const prismaClientSingleton = () => {
       log: ["warn", "error"],
     }).$extends(withAccelerate());
   } else {
+    // Strip sslmode from connection string to avoid conflict with explicit ssl config
+    // which causes the "SECURITY WARNING" from pg driver
+    let poolConnectionString = connectionString;
+    try {
+      const url = new URL(connectionString);
+      if (url.searchParams.has("sslmode")) {
+        url.searchParams.delete("sslmode");
+        poolConnectionString = url.toString();
+      }
+    } catch {
+      // If URL parsing fails, use original string
+    }
+
     pool = new Pool({
-      connectionString,
+      connectionString: poolConnectionString,
       ssl: connectionString.includes("localhost")
         ? false
         : { rejectUnauthorized: false },

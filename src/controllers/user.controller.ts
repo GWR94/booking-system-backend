@@ -2,7 +2,13 @@ import { CookieOptions, NextFunction, Request, Response } from "express";
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
 import { prisma, MEMBERSHIP_TIERS, MembershipTier } from "@config";
-import { generateTokens, handleSendEmail, logger } from "@utils";
+import {
+  generateTokens,
+  handleSendEmail,
+  logger,
+  AuthError,
+  ValidationError,
+} from "@utils";
 import { User, UserPayload, AuthenticatedRequest } from "@interfaces";
 import { MembershipService } from "@services";
 import Stripe from "stripe";
@@ -48,11 +54,7 @@ export const registerUser = async (
     });
 
     if (userExists && userExists.passwordHash) {
-      res.status(409).json({
-        message: "User already exists",
-        error: "DUPLICATE_USER",
-      });
-      return;
+      throw new AuthError("User already exists", 409, "DUPLICATE_USER");
     }
 
     const passwordHash = await bcrypt.hash(password, SALT_ROUNDS);
@@ -91,71 +93,63 @@ export const registerUser = async (
 };
 
 export const verifyUser = async (
-  req: Request,
+  req: AuthenticatedRequest,
   res: Response,
   next: NextFunction,
 ) => {
   try {
-    const { accessToken, refreshToken } = req.cookies;
+    const userPayload = req.currentUser;
 
-    // If no access token AND no refresh token, user is simply not logged in (Guest)
-    // Return null user instead of 401 to prevent frontend refresh loop
-    if (!accessToken && !refreshToken) {
-      res.json({ user: null });
-      return;
-    }
-
-    if (!accessToken) {
-      // If we have a refresh token but no access token, let the frontend
-      // interceptor handle the refresh via 401
-      res.status(401).json({
-        message: "No access token found",
-        error: "NO_ACCESS_TOKEN",
-      });
-      return;
-    }
-
-    const decoded = jwt.verify(
-      accessToken,
-      process.env.ACCESS_TOKEN_SECRET as string,
-    ) as User;
-
-    const user = await prisma.user.findUnique({
-      where: {
-        id: decoded.id,
-      },
-      include: {
-        bookings: {
-          include: {
-            slots: {
-              include: {
-                bay: true,
+    // If we have a valid access token (via passiveAuthenticate), return the user
+    if (userPayload) {
+      const user = await prisma.user.findUnique({
+        where: {
+          id: userPayload.id,
+        },
+        include: {
+          bookings: {
+            include: {
+              slots: {
+                include: {
+                  bay: true,
+                },
               },
             },
           },
         },
-      },
-    });
+      });
 
-    if (!user) {
-      res.status(404).json({
-        message: "User not found",
-        error: "USER_NOT_FOUND",
+      if (!user) {
+        throw new AuthError("User not found", 404, "USER_NOT_FOUND");
+      }
+
+      const hasPassword = !!user.passwordHash;
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const { passwordHash, ...safeUser } = user;
+
+      const membershipUsage = await MembershipService.getUsageStats(
+        user as any,
+      );
+
+      res.json({
+        user: {
+          ...safeUser,
+          hasPassword,
+          membershipUsage,
+        },
       });
       return;
     }
 
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const { passwordHash, ...safeUser } = user;
+    // If no access token but we have a refresh token, let the frontend
+    // interceptor handle the refresh via 401
+    const { refreshToken } = req.cookies;
+    if (refreshToken) {
+      throw new AuthError("No access token found", 401, "NO_ACCESS_TOKEN");
+    }
 
-    const membershipUsage = await MembershipService.getUsageStats(user as any);
-
-    res.json({
-      user: {
-        ...safeUser,
-        membershipUsage,
-      },
-    });
+    // If neither, user is Guest
+    res.json({ user: null });
   } catch (error) {
     next(error);
   }
@@ -174,29 +168,25 @@ export const loginUser = async (
     });
 
     if (!user) {
-      res.status(404).json({
-        message: "User not found",
-        error: "USER_NOT_FOUND",
-      });
-      return;
+      throw new AuthError("User not found", 404, "USER_NOT_FOUND");
     }
 
     if (!user.passwordHash) {
-      res.status(422).json({
-        message: "User authentication method not supported",
-        error: "WRONG_AUTH_METHOD",
-      });
-      return;
+      throw new AuthError(
+        "User authentication method not supported",
+        422,
+        "WRONG_AUTH_METHOD",
+      );
     }
 
     const validPassword = await bcrypt.compare(password, user.passwordHash);
 
     if (!validPassword) {
-      res.status(401).json({
-        message: "Incorrect email or password",
-        error: "INCORRECT_INPUT",
-      });
-      return;
+      throw new AuthError(
+        "Incorrect email or password",
+        401,
+        "INCORRECT_INPUT",
+      );
     }
 
     res.clearCookie("accessToken");
@@ -249,11 +239,7 @@ export const setOAuthTokensThenRedirect = (
   const user = req.user as UserPayload;
   try {
     if (!user) {
-      res.status(400).json({
-        message: "User not authenticated",
-        error: "NOT_AUTHENTICATED",
-      });
-      return;
+      throw new AuthError("User not authenticated", 400, "NOT_AUTHENTICATED");
     }
     const { accessToken, refreshToken } = generateTokens(user);
     res.cookie("accessToken", accessToken, accessTokenConfig);
@@ -275,16 +261,82 @@ export const updateUser = async (
   next: NextFunction,
 ) => {
   const user = (req.user || req.currentUser) as UserPayload;
+  const { newPassword, password } = req.body;
   try {
     if (!user) {
-      res.status(401).json({ message: "Unauthorized" });
-      return;
+      throw new AuthError("Unauthorized", 401, "UNAUTHORIZED");
     }
+    const allowedUpdates = [
+      "name",
+      "phone",
+      "allowMarketing",
+      "googleId",
+      "facebookId",
+      "twitterId",
+    ];
+    const updates = Object.keys(req.body)
+      .filter((key) => allowedUpdates.includes(key))
+      .reduce((obj, key) => {
+        obj[key] = req.body[key];
+        return obj;
+      }, {} as any);
+
+    if (newPassword) {
+      const dbUser = await prisma.user.findUnique({
+        where: { id: user.id },
+      });
+
+      if (!dbUser) {
+        throw new AuthError("User not found", 404, "USER_NOT_FOUND");
+      }
+
+      if (dbUser.passwordHash) {
+        if (!password) {
+          throw new ValidationError(
+            "Current password is required",
+            400,
+            "PASSWORD_REQUIRED",
+          );
+        }
+
+        const validPassword = await bcrypt.compare(
+          password,
+          dbUser.passwordHash,
+        );
+
+        if (!validPassword) {
+          throw new AuthError(
+            "Incorrect current password",
+            401,
+            "INCORRECT_PASSWORD",
+          );
+        }
+      }
+
+      updates.passwordHash = await bcrypt.hash(newPassword, SALT_ROUNDS);
+
+      const finalEmail =
+        updates.email !== undefined ? updates.email : dbUser.email;
+      if (!finalEmail) {
+        throw new ValidationError(
+          "Email is required to set a password",
+          400,
+          "EMAIL_REQUIRED",
+        );
+      }
+    }
+
+    if (Object.keys(updates).length === 0) {
+      throw new ValidationError(
+        "No valid fields to update",
+        400,
+        "NO_VALID_FIELDS",
+      );
+    }
+
     const updated = await prisma.user.update({
       where: { id: user.id },
-      data: {
-        ...req.body,
-      },
+      data: updates,
     });
     res.json({ user: updated });
   } catch (error) {
@@ -299,11 +351,7 @@ export const refreshToken = async (
 ) => {
   const { refreshToken } = req.cookies;
   if (!refreshToken) {
-    res.status(401).json({
-      message: "No refresh token found",
-      error: "NO_REFRESH_TOKEN",
-    });
-    return;
+    throw new AuthError("No refresh token found", 401, "NO_REFRESH_TOKEN");
   }
 
   const decoded = jwt.verify(
@@ -340,11 +388,7 @@ export const getUserProfile = async (
   next: NextFunction,
 ) => {
   if (!req.currentUser) {
-    res.status(400).json({
-      message: "User not authenticated",
-      error: "NOT_AUTHENTICATED",
-    });
-    return;
+    throw new AuthError("User not authenticated", 400, "NOT_AUTHENTICATED");
   }
   const { id } = req.currentUser;
 
@@ -362,11 +406,7 @@ export const getUserProfile = async (
     });
 
     if (!user) {
-      res.status(404).json({
-        message: "User not found",
-        error: "USER_NOT_FOUND",
-      });
-      return;
+      throw new AuthError("User not found", 404, "USER_NOT_FOUND");
     }
 
     res.json({ user });
@@ -381,11 +421,7 @@ export const deleteUserProfile = async (
   next: NextFunction,
 ) => {
   if (!req.currentUser) {
-    res.status(400).json({
-      message: "User not authenticated",
-      error: "NOT_AUTHENTICATED",
-    });
-    return;
+    throw new AuthError("User not authenticated", 400, "NOT_AUTHENTICATED");
   }
   const { id } = req.currentUser;
   try {
@@ -407,13 +443,11 @@ export const createSubscriptionSession = async (
   const { tier } = req.body;
 
   if (!tokenUser) {
-    res.status(401).json({ message: "Unauthorized" });
-    return;
+    throw new AuthError("Unauthorized", 401, "UNAUTHORIZED");
   }
 
   if (!tier || !MEMBERSHIP_TIERS[tier as MembershipTier]) {
-    res.status(400).json({ message: "Invalid membership tier" });
-    return;
+    throw new ValidationError("Invalid membership tier", 400, "INVALID_TIER");
   }
 
   const selectedTier = MEMBERSHIP_TIERS[tier as MembershipTier];
@@ -424,8 +458,7 @@ export const createSubscriptionSession = async (
     });
 
     if (!user) {
-      res.status(404).json({ message: "User not found" });
-      return;
+      throw new AuthError("User not found", 404, "USER_NOT_FOUND");
     }
 
     let customerId = user.stripeCustomerId;
@@ -483,8 +516,7 @@ export const createPortalSession = async (
   const tokenUser = req.currentUser;
 
   if (!tokenUser) {
-    res.status(401).json({ message: "Unauthorized" });
-    return;
+    throw new AuthError("Unauthorized", 401, "UNAUTHORIZED");
   }
 
   try {
@@ -493,8 +525,11 @@ export const createPortalSession = async (
     });
 
     if (!user || !user.stripeCustomerId) {
-      res.status(400).json({ message: "User has no subscription to manage" });
-      return;
+      throw new ValidationError(
+        "User has no subscription to manage",
+        400,
+        "NO_SUBSCRIPTION",
+      );
     }
     const session = await stripe.billingPortal.sessions.create({
       customer: user.stripeCustomerId,
@@ -516,14 +551,12 @@ export const unlinkProvider = async (
   const userPayload = req.currentUser;
 
   if (!userPayload) {
-    res.status(401).json({ message: "Unauthorized" });
-    return;
+    throw new AuthError("Unauthorized", 401, "UNAUTHORIZED");
   }
 
   const allowedProviders = ["google", "facebook", "twitter"];
   if (!allowedProviders.includes(provider)) {
-    res.status(400).json({ message: "Invalid provider" });
-    return;
+    throw new ValidationError("Invalid provider", 400, "INVALID_PROVIDER");
   }
 
   try {
@@ -532,8 +565,7 @@ export const unlinkProvider = async (
     });
 
     if (!user) {
-      res.status(404).json({ message: "User not found" });
-      return;
+      throw new AuthError("User not found", 404, "USER_NOT_FOUND");
     }
 
     // Safety Check: Prevent lockout
@@ -546,12 +578,11 @@ export const unlinkProvider = async (
     const hasPassword = !!user.passwordHash;
 
     if (!hasPassword && activeProviderCount <= 1) {
-      res.status(400).json({
-        message:
-          "Cannot disconnect your only login method. Please set a password or connect another account first.",
-        error: "LOCKOUT_PREVENTION",
-      });
-      return;
+      throw new ValidationError(
+        "Cannot disconnect your only login method. Please set a password or connect another account first.",
+        400,
+        "LOCKOUT_PREVENTION",
+      );
     }
 
     const updatedUser = await prisma.user.update({
@@ -661,11 +692,11 @@ export const resetPassword = async (
       user.resetToken !== token ||
       (user.resetTokenExpiry && user.resetTokenExpiry < new Date())
     ) {
-      res.status(400).json({
-        message: "Invalid or expired reset token",
-        error: "INVALID_TOKEN",
-      });
-      return;
+      throw new ValidationError(
+        "Invalid or expired reset token",
+        400,
+        "INVALID_TOKEN",
+      );
     }
 
     const passwordHash = await bcrypt.hash(password, SALT_ROUNDS);
@@ -685,11 +716,13 @@ export const resetPassword = async (
       (error as Error).name === "JsonWebTokenError" ||
       (error as Error).name === "TokenExpiredError"
     ) {
-      res.status(400).json({
-        message: "Invalid or expired reset token",
-        error: "INVALID_TOKEN",
-      });
-      return;
+      return next(
+        new ValidationError(
+          "Invalid or expired reset token",
+          400,
+          "INVALID_TOKEN",
+        ),
+      );
     }
     next(error);
   }

@@ -1,6 +1,6 @@
 import { prisma } from "@config";
 import Stripe from "stripe";
-import { handleSendEmail, groupSlotsByBay, logger } from "@utils";
+import { handleSendEmail, groupSlotsByBay, logger, BookingError } from "@utils";
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY as string);
 
@@ -42,7 +42,11 @@ export class BookingService {
     }
 
     if (!finalUserId) {
-      throw new Error("User ID or guest info must be provided");
+      throw new BookingError(
+        "User ID or guest info must be provided",
+        400,
+        "MISSING_USER_CONTEXT",
+      );
     }
 
     const slots = await prisma.slot.findMany({
@@ -53,7 +57,11 @@ export class BookingService {
     });
 
     if (slots.length !== slotIds.length) {
-      throw new Error("One or more slots do not exist or have been booked");
+      throw new BookingError(
+        "One or more slots do not exist or have been booked",
+        400,
+        "SLOT_NOT_AVAILABLE",
+      );
     }
 
     const booking = await prisma.booking.create({
@@ -101,7 +109,7 @@ export class BookingService {
     });
 
     if (!booking) {
-      throw new Error("Booking not found");
+      throw new BookingError("Booking not found", 404, "BOOKING_NOT_FOUND");
     }
 
     const intent = await stripe.paymentIntents.retrieve(paymentId);

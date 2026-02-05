@@ -40,15 +40,74 @@ describe("calculateBasketCost", () => {
     const basket = [
       {
         startTime: "2024-01-22T10:00:00Z", // Off-Peak
-        slotIds: [1],
+        id: 1,
       },
       {
         startTime: "2024-01-22T18:00:00Z", // Peak
-        slotIds: [2, 3], // 2 slots
+        id: 2,
+      },
+      {
+        startTime: "2024-01-22T18:00:00Z", // Peak
+        id: 3,
       },
     ] as any;
     const total = calculateBasketCost(basket);
     expect(total).toBe(OFF_PEAK_RATE + 2 * PEAK_RATE);
+  });
+
+  it("should calculate member cost with discount", () => {
+    const basket = [
+      {
+        startTime: "2024-01-22T10:00:00Z", // Weekday
+        id: 1,
+      },
+    ] as any;
+    const tierConfig = {
+      discount: 0.1,
+      includedHours: 0,
+      weekendAccess: false,
+    };
+    const total = calculateBasketCost(basket, { tierConfig });
+    expect(total).toBe(Math.round(OFF_PEAK_RATE * 0.9));
+  });
+
+  it("should handle included hours for members", () => {
+    const basket = [
+      {
+        startTime: "2024-01-22T10:00:00Z", // Weekday (Eligible)
+        id: 1,
+      },
+    ] as any;
+    const tierConfig = {
+      discount: 0.1,
+      includedHours: 5,
+      weekendAccess: false,
+    };
+    const total = calculateBasketCost(basket, {
+      tierConfig,
+      remainingIncludedHours: 1,
+    });
+    expect(total).toBe(0);
+  });
+
+  it("should deny free hours on weekends if tier doesn't support it", () => {
+    const basket = [
+      {
+        startTime: "2024-01-20T10:00:00Z", // Saturday (Not Eligible for this tier)
+        id: 1,
+      },
+    ] as any;
+    const tierConfig = {
+      discount: 0.1,
+      includedHours: 5,
+      weekendAccess: false,
+    };
+    const total = calculateBasketCost(basket, {
+      tierConfig,
+      remainingIncludedHours: 1,
+    });
+    // Should apply discount but not free hour
+    expect(total).toBe(Math.round(PEAK_RATE * 0.9));
   });
 
   it("should return 0 for empty basket", () => {

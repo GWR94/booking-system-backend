@@ -16,7 +16,9 @@ jest.mock("stripe", () => {
 
 describe("Booking Routes Integration", () => {
   let userToken: string;
+  let otherUserToken: string;
   let testUser: any;
+  let otherUser: any;
   let testBay: any;
   let testSlot: any;
 
@@ -31,6 +33,17 @@ describe("Booking Routes Integration", () => {
       },
     });
     userToken = generateTokens(testUser).accessToken;
+
+    otherUser = await prisma.user.upsert({
+      where: { email: "other@example.com" },
+      update: {},
+      create: {
+        email: "other@example.com",
+        name: "Other Tester",
+        passwordHash: "hash",
+      },
+    });
+    otherUserToken = generateTokens(otherUser).accessToken;
 
     testBay = await prisma.bay.upsert({
       where: { name: "Test Bay Booking" },
@@ -49,10 +62,26 @@ describe("Booking Routes Integration", () => {
   });
 
   afterAll(async () => {
-    await prisma.booking.deleteMany({ where: { userId: testUser.id } });
-    await prisma.slot.deleteMany({ where: { bayId: testBay.id } });
-    await prisma.bay.delete({ where: { id: testBay.id } });
-    await prisma.user.delete({ where: { id: testUser.id } });
+    if (testUser?.id || otherUser?.id) {
+      await prisma.booking.deleteMany({
+        where: {
+          userId: { in: [testUser?.id, otherUser?.id].filter((id) => !!id) },
+        },
+      });
+    }
+    if (testSlot?.id) {
+      await prisma.slot.deleteMany({ where: { id: testSlot.id } });
+    }
+    if (testBay?.id) {
+      await prisma.bay.delete({ where: { id: testBay.id } });
+    }
+    if (testUser?.id || otherUser?.id) {
+      await prisma.user.deleteMany({
+        where: {
+          id: { in: [testUser?.id, otherUser?.id].filter((id) => !!id) },
+        },
+      });
+    }
     await disconnectDb();
   });
 
@@ -87,8 +116,8 @@ describe("Booking Routes Integration", () => {
         .set("Cookie", [`accessToken=${userToken}`])
         .send({
           slotIds: [testSlot.id],
-          date: testSlot.startTime.toISOString().split("T")[0],
           paymentId: "pi_test_123",
+          paymentStatus: "succeeded",
         });
 
       expect(res.status).toBe(201);
@@ -119,6 +148,23 @@ describe("Booking Routes Integration", () => {
         where: { id: testSlot.id },
       });
       expect(updatedSlot?.status).toBe("available");
+    });
+
+    it("should prevent unauthorized users from cancelling a booking", async () => {
+      const booking = await prisma.booking.create({
+        data: {
+          userId: testUser.id,
+          status: "pending",
+          bookingTime: new Date(),
+          slots: { connect: { id: testSlot.id } },
+        },
+      });
+
+      const res = await request(app)
+        .delete(`/api/bookings/${booking.id}`)
+        .set("Cookie", [`accessToken=${otherUserToken}`]);
+
+      expect(res.status).toBe(403);
     });
   });
 });

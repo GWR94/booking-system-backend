@@ -9,17 +9,12 @@ import {
 import { Request, Response, NextFunction } from "express";
 import {
   registerUser,
-  verifyUser,
   loginUser,
-  logoutUser,
-  refreshToken,
-  unlinkProvider,
-  getUserProfile,
-  updateUser,
   requestPasswordReset,
   resetPassword,
 } from "./user.controller";
 import { prisma } from "@config";
+import { ValidationError } from "@utils";
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
 
@@ -44,14 +39,25 @@ jest.mock("@config", () => ({
 }));
 
 jest.mock("bcrypt");
-jest.mock("@utils", () => ({
-  __esModule: true,
-  generateTokens: () => ({
-    accessToken: "mock_access_token",
-    refreshToken: "mock_refresh_token",
-  }),
-  handleSendEmail: jest.fn(),
-}));
+jest.mock("@utils", () => {
+  const { AuthError, ValidationError } = jest.requireActual(
+    "../utils/errors",
+  ) as any;
+  return {
+    __esModule: true,
+    AuthError,
+    ValidationError,
+    generateTokens: () => ({
+      accessToken: "mock_access_token",
+      refreshToken: "mock_refresh_token",
+    }),
+    handleSendEmail: jest.fn(),
+    logger: {
+      info: jest.fn(),
+      error: jest.fn(),
+    },
+  };
+});
 
 jest.mock("jsonwebtoken", () => {
   const mockJwt = {
@@ -188,10 +194,7 @@ describe("UserController Integration", () => {
 
       await resetPassword(req as Request, res as Response, next);
 
-      expect(res.status).toHaveBeenCalledWith(400);
-      expect(res.json).toHaveBeenCalledWith(
-        expect.objectContaining({ error: "INVALID_TOKEN" }),
-      );
+      expect(next).toHaveBeenCalledWith(expect.any(ValidationError));
     });
   });
 });

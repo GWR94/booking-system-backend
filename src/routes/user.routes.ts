@@ -82,7 +82,7 @@ router.delete(
 
 router.delete("/profile/delete", authenticateToken, deleteUserProfile);
 
-router.get("/verify", verifyUser);
+router.get("/verify", passiveAuthenticate, verifyUser);
 
 router.post("/refresh", refreshToken);
 

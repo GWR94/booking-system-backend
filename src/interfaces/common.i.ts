@@ -7,4 +7,5 @@ export interface Error {
 }
 export interface AuthenticatedRequest extends Request {
   currentUser?: UserPayload;
+  booking?: any; // Prefetched booking for authorization middlewares
 }

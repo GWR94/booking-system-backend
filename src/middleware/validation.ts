@@ -117,3 +117,52 @@ export const validateLogin = (
   }
   next();
 };
+
+// Schema for creating a booking
+const bookingSchema = Joi.object({
+  slotIds: Joi.array()
+    .items(Joi.number().integer())
+    .min(1)
+    .required()
+    .messages({
+      "array.min": "At least one slot is required",
+      "any.required": "Slot IDs are required",
+    }),
+  paymentId: Joi.string().allow(null, "").optional(),
+  paymentStatus: Joi.string().required(),
+});
+
+// Schema for creating a guest booking
+const guestBookingSchema = bookingSchema.keys({
+  guestInfo: Joi.object({
+    name: Joi.string().required(),
+    email: Joi.string().email().required(),
+    phone: Joi.string().allow("").optional(),
+  }).required(),
+});
+
+export const validateBooking = (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+) => {
+  const { error } = bookingSchema.validate(req.body);
+  if (error) {
+    res.status(400).json({ message: error.details[0].message });
+    return;
+  }
+  next();
+};
+
+export const validateGuestBooking = (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+) => {
+  const { error } = guestBookingSchema.validate(req.body);
+  if (error) {
+    res.status(400).json({ message: error.details[0].message });
+    return;
+  }
+  next();
+};

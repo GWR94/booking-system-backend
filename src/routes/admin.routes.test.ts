@@ -1,10 +1,11 @@
 import request from "supertest";
-jest.unmock("@config");
-jest.unmock("@config/prisma.config");
 import app from "../../app";
 import { prisma, disconnectDb } from "@config";
 import generateTokens from "@utils/generate-tokens";
 import dayjs from "dayjs";
+
+jest.unmock("@config");
+jest.unmock("@config/prisma.config");
 
 describe("Admin Routes", () => {
   let adminToken: string;
