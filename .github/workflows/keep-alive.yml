@@ -1,9 +1,10 @@
+# REMINDER: Turn this off or reduce frequency once the backend stability is confirmed to avoid excessive logging.
 name: Keep Backend Alive
 
 on:
   schedule:
-    # Run every 10 minutes
-    - cron: "*/10 * * * *"
+    # Run every 5 minutes to account for GitHub delays
+    - cron: "*/5 * * * *"
   workflow_dispatch: # Allow manual triggering
 
 jobs:
@@ -17,7 +18,10 @@ jobs:
           # We can use a GitHub Secret called BACKEND_URL
           if [ -n "${{ secrets.BACKEND_URL }}" ]; then
             # Retry up to 5 times, wait 10 seconds between retries, max time 180s to allow for cold starts
-            curl -f --retry 5 --retry-delay 10 --retry-connrefused --max-time 180 "${{ secrets.BACKEND_URL }}/health"
+            echo "Pinging health endpoint..."
+            curl -f --retry 5 --retry-delay 10 --retry-connrefused --max-time 180 -w "\nStatus: %{http_code}\n" "${{ secrets.BACKEND_URL }}/health"
+            echo "Pinging root endpoint..."
+            curl -f --retry 3 --retry-delay 5 --retry-connrefused --max-time 60 -w "\nStatus: %{http_code}\n" "${{ secrets.BACKEND_URL }}/"
           else
             echo "BACKEND_URL secret is not set. Please add it to your repo secrets."
             exit 1
