@@ -8,8 +8,8 @@ import dayjs from "dayjs";
  *   npx ts-node scripts/seed-demo-data.ts [numberOfMonths] [pattern] [monthType]
  *   Example: npx ts-node scripts/seed-demo-data.ts 3 cycle
  *   Example: npx ts-node scripts/seed-demo-data.ts 6 random
- *   Example: npx ts-node scripts/seed-demo-data.ts 2 quiet (only quiet months)
- *   Example: npx ts-node scripts/seed-demo-data.ts 5 busy (only busy months)
+ *   Example: npx ts-node scripts/seed-demo-data.ts 2 quiet (2 only quiet months)
+ *   Example: npx ts-node scripts/seed-demo-data.ts 5 busy (5 only busy months)
  *
  * Pattern options:
  * - 'cycle' (default): Cycles through busy → mixed → quiet → busy → ...
@@ -221,50 +221,74 @@ async function seedDemoData(
       user: any,
       daysOffset: number,
       hour: number,
+      duration: number, // Added duration parameter
       bayId: number,
       status = "confirmed",
     ) => {
       const targetDate = dayjs().add(daysOffset, "day").startOf("day");
+
+      // Calculate start and end times
       const startTime = targetDate.hour(hour).minute(0).second(0).toDate();
-      const endTime = targetDate.hour(hour).minute(55).second(0).toDate();
+      // End time is after 'duration' hours (e.g., 10:00 + 2 hours = 12:00 end time)
+      // Note: In the slot logic, a 10:00-10:55 slot effectively "ends" at 11:00 for booking purposes
+      const endHour = hour + duration - 1;
+      const endTime = targetDate.hour(endHour).minute(55).second(0).toDate();
 
-      const slot = await prisma.slot.upsert({
-        where: {
-          startTime_endTime_bayId: {
-            startTime,
-            endTime,
-            bayId,
+      // Find or create all slots involved in this booking
+      const slotIds: number[] = [];
+
+      for (let i = 0; i < duration; i++) {
+        const slotStart = targetDate
+          .hour(hour + i)
+          .minute(0)
+          .second(0)
+          .toDate();
+        const slotEnd = targetDate
+          .hour(hour + i)
+          .minute(55)
+          .second(0)
+          .toDate();
+
+        const slot = await prisma.slot.upsert({
+          where: {
+            startTime_endTime_bayId: {
+              startTime: slotStart,
+              endTime: slotEnd,
+              bayId,
+            },
           },
-        },
-        update: { status: "booked" },
-        create: {
-          startTime,
-          endTime,
-          bayId,
-          status: "booked",
-        },
+          update: { status: "booked" },
+          create: {
+            startTime: slotStart,
+            endTime: slotEnd,
+            bayId,
+            status: "booked",
+          },
+        });
+        slotIds.push(slot.id);
+      }
+
+      // Check if any of these slots are already booked by another booking
+      const conflictingBooking = await prisma.booking.findFirst({
+        where: { slots: { some: { id: { in: slotIds } } } },
       });
 
-      const existingBooking = await prisma.booking.findFirst({
-        where: { slots: { some: { id: slot.id } } },
-      });
-
-      if (!existingBooking) {
+      if (!conflictingBooking) {
         await prisma.booking.create({
           data: {
             userId: user.id,
             status,
             paymentStatus: "paid",
             bookingTime: new Date(),
-            slots: { connect: { id: slot.id } },
+            slots: { connect: slotIds.map((id) => ({ id })) },
           },
         });
         console.log(
-          `   📅 Booking created for ${user.name} at ${dayjs(startTime).format("DD/MM HH:mm")}`,
+          `   📅 Booking created for ${user.name} at ${dayjs(startTime).format("DD/MM HH:mm")} (${duration} slots)`,
         );
       } else {
         console.log(
-          `   ⏭️  Slot at ${dayjs(startTime).format("DD/MM HH:mm")} already booked.`,
+          `   ⏭️  Slots starting at ${dayjs(startTime).format("DD/MM HH:mm")} overlap with existing booking.`,
         );
       }
     };
@@ -345,17 +369,74 @@ async function seedDemoData(
           dayProbability = Math.min(dayProbability * variationFactor, 0.95);
         }
 
+        // Track booked hours for this specific day/bay combo to prevent overlap
+        // Map: BayID -> Set<Hour>
+        const bayBookedHours = new Map<number, Set<number>>();
+        for (const bay of bays) {
+          bayBookedHours.set(bay.id, new Set());
+        }
+
         // Create bookings for this day
-        for (const hour of operatingHours) {
-          // Randomly decide if this slot should be booked based on probability
+        // Iterate through hours, but we might skip some if a multi-slot booking occurs
+        let hourIndex = 0;
+        while (hourIndex < operatingHours.length) {
+          const hour = operatingHours[hourIndex];
+
+          // Randomly decide if we *attempt* a booking starting at this hour
           if (Math.random() < dayProbability) {
             const randomUser =
               activeUsers[Math.floor(Math.random() * activeUsers.length)];
             const randomBay = bays[Math.floor(Math.random() * bays.length)];
-            const daysFromNow = currentDate.diff(dayjs(), "day");
+            const bookedHoursForBay = bayBookedHours.get(randomBay.id)!;
 
-            await createBooking(randomUser, daysFromNow, hour, randomBay.id);
+            // Check if this hour is already booked in this bay (redundant if logic is perfect, but safe)
+            if (bookedHoursForBay.has(hour)) {
+              hourIndex++;
+              continue;
+            }
+
+            // Determine Duration (1, 2, or 3 hours)
+            // Weighting: 1hr (60%), 2hr (30%), 3hr (10%)
+            const rand = Math.random();
+            let duration = 1;
+            if (rand > 0.6) duration = 2;
+            if (rand > 0.9) duration = 3;
+
+            // Truncate duration if it extends past closing time (22:00)
+            const remainingHours = operatingHours.length - hourIndex;
+            if (duration > remainingHours) {
+              duration = remainingHours;
+            }
+
+            // Check if ANY of the slots in this duration are already booked
+            let isOverlapping = false;
+            for (let d = 0; d < duration; d++) {
+              if (bookedHoursForBay.has(hour + d)) {
+                isOverlapping = true;
+                break;
+              }
+            }
+
+            if (!isOverlapping) {
+              const daysFromNow = currentDate.diff(dayjs(), "day");
+              await createBooking(
+                randomUser,
+                daysFromNow,
+                hour,
+                duration,
+                randomBay.id,
+              );
+
+              // Mark hours as booked
+              for (let d = 0; d < duration; d++) {
+                bookedHoursForBay.add(hour + d);
+              }
+            }
           }
+
+          // We always advance by 1 hour loop-wise, but the 'bookedHours' map handles skipping actual availability.
+          // Alternatively, we could advance by `duration` if we were filling sequentially, but here we are simulating random requests arriving.
+          hourIndex++;
         }
       }
     }

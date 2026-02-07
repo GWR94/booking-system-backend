@@ -1,5 +1,4 @@
 import { PrismaClient } from "@prisma/client";
-import { withAccelerate } from "@prisma/extension-accelerate";
 import { Pool } from "pg";
 import { PrismaPg } from "@prisma/adapter-pg";
 import path from "path";
@@ -18,49 +17,31 @@ if (!connectionString) {
 let pool: Pool | undefined;
 
 const prismaClientSingleton = () => {
-  const isAccelerate =
-    connectionString.startsWith("prisma://") ||
-    connectionString.startsWith("prisma+postgres://");
-
-  if (isAccelerate) {
-    return new PrismaClient({
-      datasources: {
-        db: {
-          url: connectionString,
-        },
-      },
-      log: ["warn", "error"],
-    }).$extends(withAccelerate());
-  } else {
-    // Strip sslmode from connection string to avoid conflict with explicit ssl config
-    // which causes the "SECURITY WARNING" from pg driver
-    let poolConnectionString = connectionString;
-    try {
-      const url = new URL(connectionString);
-      if (url.searchParams.has("sslmode")) {
-        url.searchParams.delete("sslmode");
-        poolConnectionString = url.toString();
-      }
-    } catch (error) {
-      console.warn(
-        "Failed to parse DATABASE_URL, using original string:",
-        error,
-      );
+  // Strip sslmode from connection string to avoid conflict with explicit ssl config
+  // which causes the "SECURITY WARNING" from pg driver
+  let poolConnectionString = connectionString;
+  try {
+    const url = new URL(connectionString);
+    if (url.searchParams.has("sslmode")) {
+      url.searchParams.delete("sslmode");
+      poolConnectionString = url.toString();
     }
-
-    pool = new Pool({
-      connectionString: poolConnectionString,
-      ssl: connectionString.includes("localhost")
-        ? false
-        : { rejectUnauthorized: false },
-      max: 20,
-    });
-    const adapter = new PrismaPg(pool);
-    return new PrismaClient({
-      adapter,
-      log: ["warn", "error"],
-    });
+  } catch (error) {
+    console.warn("Failed to parse DATABASE_URL, using original string:", error);
   }
+
+  pool = new Pool({
+    connectionString: poolConnectionString,
+    ssl: connectionString.includes("localhost")
+      ? false
+      : { rejectUnauthorized: false },
+    max: 20,
+  });
+  const adapter = new PrismaPg(pool);
+  return new PrismaClient({
+    adapter,
+    log: ["warn", "error"],
+  });
 };
 
 declare global {

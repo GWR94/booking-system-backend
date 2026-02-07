@@ -23,7 +23,6 @@
   "prisma": {
     "seed": "ts-node scripts/seed.ts"
   },
-  "keywords": [],
   "author": "James Gower",
   "license": "ISC",
   "dependencies": {
